@@ -736,7 +736,7 @@
     { q: 'What does the moving probe actually measure?', a: 'The potential difference between that point and the reference plate', o: ['The current from the battery', 'The charge at that point', 'The resistance of the plate'],
       hint: 'A voltmeter always compares two points.', ex: 'The voltmeter reads the potential difference between the probe tip and the plate the other lead is connected to.' },
     { q: 'Following the method, how many different potential values are mapped in total?', a: 'Four', o: ['One', 'Two', 'Ten'],
-      hint: 'One value first, then "three other values".', ex: 'You map one value, then choose three other values: four equipotential lines, four rows in the table.' },
+      hint: 'One value first, then "three other values".', ex: 'One value is mapped first, then three other values are chosen: four equipotential lines, four rows in the table.' },
     { q: 'In the observation table, one row contains…', a: 'the coordinates of points that share one potential value', o: ['four different potentials at one point', 'the battery voltage at four times', 'the current through four resistors'],
       hint: 'The first column is V; the rest are (X, Y) pairs.', ex: 'Each row is one equipotential line: a voltage V and the (X, Y) positions of points at that voltage.' },
     { q: "According to Coulomb's law, the force between two charges is proportional to…", a: 'q₁q₂ / r²', o: ['q₁ + q₂', 'q₁q₂ × r', 'r² / q₁q₂'],

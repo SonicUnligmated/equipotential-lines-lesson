@@ -13,7 +13,7 @@ https://sonicunligmated.github.io/equipotential-lines-lesson/
 3. Medical perspectives (tissue fields / ECG, defibrillation, electrotherapy, electrode design)
 4. Method (click a step; diagram on the right)
 5. Formula (Coulomb's law explorer: q1, q2, r → F)
-6. Observation & graph (worked example table + graph)
+6. Observation & graph (example table + graph, generated from the field model)
 7. MCQs (20 questions, choices reshuffled on load / reset)
 8. Practical (simulated tray, voltmeter, record points, graph, true lines, start over)
 
