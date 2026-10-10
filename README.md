@@ -30,6 +30,6 @@ the field lines all come from this one grid.
 - `css/styles.css`, `css/fonts.css` — theme; fonts vendored in `fonts/` (Sora, Source Sans 3, Kalam — SIL OFL)
 - `js/app.js` — navigation, background, probe cursor, interactives, MCQs, Practical
 - `js/field-data.js` — precomputed potential grid
-- `assets/` — circuit diagram and defibrillator photo from the lab manual, cropped graph paper
+- `assets/` — circuit diagram and defibrillator photo from the lab manual (graph paper is drawn as SVG)
 
 Open `index.html` directly or serve the folder; no build step and no network needed.
