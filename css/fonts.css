@@ -1,0 +1,6 @@
+/* Vendored Google Fonts (latin subset) — Sora, Source Sans 3, Kalam. SIL Open Font License. */
+@font-face{font-family:'Sora';font-style:normal;font-weight:400 800;font-display:swap;src:url(../fonts/Sora-var.woff2) format('woff2');}
+@font-face{font-family:'Source Sans 3';font-style:normal;font-weight:300 800;font-display:swap;src:url(../fonts/SourceSans3-var.woff2) format('woff2');}
+@font-face{font-family:'Source Sans 3';font-style:italic;font-weight:400;font-display:swap;src:url(../fonts/SourceSans3-italic.woff2) format('woff2');}
+@font-face{font-family:'Kalam';font-style:normal;font-weight:400;font-display:swap;src:url(../fonts/Kalam-400.woff2) format('woff2');}
+@font-face{font-family:'Kalam';font-style:normal;font-weight:700;font-display:swap;src:url(../fonts/Kalam-700.woff2) format('woff2');}

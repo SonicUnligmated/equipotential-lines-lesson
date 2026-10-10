@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapping of Equipotential Lines · Lab 7A</title>
+<meta name="description" content="Lab 7A — Mapping of equipotential lines in an electric field. Concept, medical perspectives, method, formula, worked observation, MCQs and a simulated practical.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23f7f3ea'/%3E%3Cpath d='M8 4c5 7 5 17 0 24M16 4c3 7 3 17 0 24M24 4c-5 7-5 17 0 24' fill='none' stroke='%232d4fa3' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/fonts.css">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<canvas id="bg-field" aria-hidden="true"></canvas>
+<div id="probe-cursor" aria-hidden="true">
+  <svg class="probe-tip" viewBox="0 0 40 40" width="40" height="40">
+    <path d="M3 3 L13 9 L9 13 Z" class="tip-metal"/>
+    <path d="M11 11 L30 30" class="tip-shaft"/>
+    <circle cx="3" cy="3" r="1.6" class="tip-point"/>
+  </svg>
+  <span class="probe-read" id="probe-read"></span>
+</div>
+
+<div class="app">
+  <aside class="rail" aria-label="Lesson progress">
+    <div class="rail-brand">
+      <div class="rail-eyebrow">Physics lab · 7A</div>
+      <div class="rail-title">Equipotential<br> Lines</div>
+    </div>
+    <nav class="rail-nav" id="rail-nav" aria-label="Sections">
+      <div class="rail-line" aria-hidden="true"><div class="rail-line-fill" id="rail-fill"></div></div>
+    </nav>
+  </aside>
+
+  <main class="stage" id="stage">
+    <div class="stage-top">
+      <button type="button" class="btn-prev" id="btn-prev">← Prev</button>
+    </div>
+
+    <!-- ============ AIM & OUTCOMES ============ -->
+    <section class="view" id="view-aim" data-title="Aim &amp; outcomes">
+      <div class="sheet">
+        <p class="disclaimer">This lesson is an AI-assisted, low-friction introduction. It is not scientific-grade material; its purpose is to build a working framework before the lecture and the lab session.</p>
+        <h1 class="page-h">Mapping of Equipotential Lines</h1>
+        <div class="aim-block">
+          <div class="aim-label">Aim</div>
+          <p class="aim-text">To map equipotential lines in an electric field.</p>
+        </div>
+        <h2 class="sub-h">Learning outcomes</h2>
+        <p class="lede">By the end of this session you should be able to:</p>
+        <ul class="outcomes">
+          <li>Measure the potential difference at various points in an electric field.</li>
+          <li>Map equipotential lines in an electric field.</li>
+          <li>Represent the data accurately and graphically.</li>
+        </ul>
+        <div class="aim-figure">
+          <svg id="aim-hero" viewBox="0 0 660 260" role="img" aria-label="Two plates in a tray with curved equipotential lines between them"></svg>
+        </div>
+        <div class="page-end"><button type="button" class="btn-next" data-next>Next →</button></div>
+      </div>
+    </section>
+
+    <!-- ============ CONCEPT ============ -->
+    <section class="view" id="view-concept" data-title="Equipotential lines">
+      <div class="sheet">
+        <h1 class="page-h">What are equipotential lines?</h1>
+        <p class="lede">Every point in an electric field has an <strong>electric potential</strong> (measured in volts). An <strong>equipotential line</strong> joins all the points that have the <em>same</em> potential, like a contour line on a map joins points of the same height.</p>
+        <div class="concept-stage">
+          <div class="field-frame" data-field>
+            <canvas id="concept-canvas" width="1200" height="800" aria-label="Electric field between two plates. Moving the pointer draws the equipotential line and the field line through that point."></canvas>
+          </div>
+          <div class="concept-readout" aria-live="polite">
+            <div class="cr-item"><span class="cr-swatch eq"></span>Equipotential through the probe <strong id="concept-v">—</strong></div>
+            <div class="cr-item"><span class="cr-swatch fl"></span>Field line through the probe</div>
+          </div>
+          <div class="toggle-row">
+            <button type="button" class="toggle" id="concept-all-eq" aria-pressed="true">Equipotentials every 0.5 V</button>
+            <button type="button" class="toggle" id="concept-all-fl" aria-pressed="false">Field lines</button>
+          </div>
+        </div>
+        <div class="compare">
+          <div class="compare-col">
+            <h3><span class="dot-fl"></span>Field lines</h3>
+            <ul>
+              <li>Show the direction of the force on a positive charge.</li>
+              <li>Run from the <span class="plus">+</span> plate to the <span class="minus">−</span> plate (high to low potential).</li>
+              <li>Closer together where the field is stronger.</li>
+            </ul>
+          </div>
+          <div class="compare-col">
+            <h3><span class="dot-eq"></span>Equipotential lines</h3>
+            <ul>
+              <li>Join points at the same potential; a voltmeter reads the same value all along one.</li>
+              <li>Always cross field lines at <strong>right angles</strong>.</li>
+              <li>No work is done moving a charge along one (ΔV = 0, so W = qΔV = 0).</li>
+            </ul>
+          </div>
+        </div>
+        <p class="note">Two equipotential lines never cross: one point cannot have two different potentials. Between the middle of the two plates the lines are almost straight and evenly spaced (a nearly uniform field); beyond the plate ends they bend outward.</p>
+        <div class="page-end"><button type="button" class="btn-next" data-next>Next →</button></div>
+      </div>
+    </section>
+
+    <!-- ============ MEDICAL ============ -->
+    <section class="view" id="view-medical" data-title="Medical perspectives">
+      <div class="sheet">
+        <h1 class="page-h">Medical perspectives</h1>
+        <p class="lede">The body is a conducting medium, much like the salt solution in the lab tray. The same picture of potentials, field lines and equipotentials explains how several medical devices work.</p>
+        <div class="med-grid">
+          <article class="med-card">
+            <div class="med-visual">
+              <svg viewBox="0 0 320 200" id="med-tissue" role="img" aria-label="Heart dipole with equipotential lines across the chest and ECG electrodes"></svg>
+            </div>
+            <h3>Electric fields in body tissues</h3>
+            <p>Nerve and muscle cells hold a voltage across their membranes. When the heart contracts, its activity sets up an electric field through the chest. ECG electrodes on the skin read the <strong>potential difference</strong> between points on this field, the same measurement you make with the probe.</p>
+          </article>
+          <article class="med-card">
+            <div class="med-visual photo">
+              <img src="assets/defibrillator.jpg" alt="Defibrillator pads placed on a training manikin's chest" width="275" height="183">
+            </div>
+            <h3>Defibrillation</h3>
+            <p>A <strong>defibrillator</strong> is a medical device that delivers a high-energy electric shock to the heart. Pads are placed so the field lines between them pass through the heart muscle, so that enough of the heart is depolarised at once to reset its rhythm.</p>
+          </article>
+          <article class="med-card">
+            <div class="med-visual">
+              <svg viewBox="0 0 320 200" id="med-tens" role="img" aria-label="Two skin electrodes on a forearm with field lines dipping into the tissue"></svg>
+            </div>
+            <h3>Electrotherapy</h3>
+            <p>Devices such as TENS (transcutaneous electrical nerve stimulation) pass small currents between skin electrodes to stimulate nerves or muscles. Knowing the field pattern tells you which tissue the current actually reaches.</p>
+          </article>
+          <article class="med-card">
+            <div class="med-visual">
+              <svg viewBox="0 0 320 200" id="med-electrode" role="img" aria-label="Current crowding at the edges of a small electrode compared with a large gel electrode"></svg>
+            </div>
+            <h3>Designing medical electrodes</h3>
+            <p>Field lines crowd at the edges of an electrode, so current density is highest there. Larger pads and conductive gel spread the current more evenly, which lowers the risk of skin burns and gives cleaner signals.</p>
+          </article>
+        </div>
+        <div class="page-end"><button type="button" class="btn-next" data-next>Next →</button></div>
+      </div>
+    </section>
+
+    <!-- ============ METHOD ============ -->
+    <section class="view" id="view-method" data-title="Method">
+      <div class="sheet sheet-wide">
+        <h1 class="page-h">Method</h1>
+        <div class="method">
+          <ol class="steps" id="method-steps">
+            <li><button type="button" class="step" data-step="0" aria-pressed="true"><span class="step-mark"></span><span>Connect the circuit: two charge plates in a conducting solution, a battery across the plates and a voltmeter.</span></button></li>
+            <li><button type="button" class="step" data-step="1" aria-pressed="false"><span class="step-mark"></span><span>Connect one voltmeter probe to one of the charge plates; use the other probe to measure the potential inside the solution.</span></button></li>
+            <li><button type="button" class="step" data-step="2" aria-pressed="false"><span class="step-mark"></span><span>Track the x and y values of points that have the same potential difference.</span></button></li>
+            <li><button type="button" class="step" data-step="3" aria-pressed="false"><span class="step-mark"></span><span>Choose three other values of potential difference and repeat steps 1 to 3.</span></button></li>
+            <li><button type="button" class="step" data-step="4" aria-pressed="false"><span class="step-mark"></span><span>Tabulate the results and draw each equipotential line on graph paper in your lab workbook.</span></button></li>
+          </ol>
+          <div class="step-figure" id="step-figure">
+            <figure class="sf active" data-fig="0">
+              <img src="assets/circuit-diagram.png" alt="Lab manual circuit: conducting solution between two plates, battery across the plates, voltmeter with a probe" width="446" height="402">
+              <figcaption>Experimental setup from the lab manual: battery across the plates, voltmeter with a moving probe in the conducting solution.</figcaption>
+            </figure>
+            <figure class="sf" data-fig="1"><svg viewBox="0 0 660 470" id="fig-step1" role="img" aria-label="Reference probe clipped on the negative plate, measuring probe in the solution"></svg>
+              <figcaption>The reference lead stays on the <span class="minus">−</span> plate (0 V). The meter shows the potential of wherever the probe tip touches.</figcaption></figure>
+            <figure class="sf" data-fig="2"><svg viewBox="0 0 660 470" id="fig-step2" role="img" aria-label="Four points that all read 2.0 V"></svg>
+              <figcaption>Move the probe until the meter reads the chosen value (here 2.0 V), note (x, y), then find more points with the same reading.</figcaption></figure>
+            <figure class="sf" data-fig="3"><svg viewBox="0 0 660 470" id="fig-step3" role="img" aria-label="Points for four different potentials"></svg>
+              <figcaption>Repeat for three more values (here 1, 4 and 5 V), giving four sets of points.</figcaption></figure>
+            <figure class="sf" data-fig="4"><svg viewBox="0 0 660 470" id="fig-step4" role="img" aria-label="Smooth equipotential lines drawn through each set of points"></svg>
+              <figcaption>Tabulate the points, then join each set with a smooth curve and label it with its voltage.</figcaption></figure>
+          </div>
+        </div>
+        <div class="page-end"><button type="button" class="btn-next" data-next>Next →</button></div>
+      </div>
+    </section>
+
+    <!-- ============ FORMULA ============ -->
+    <section class="view" id="view-formula" data-title="Formula">
+      <div class="sheet">
+        <h1 class="page-h">Formula: Coulomb's law</h1>
+        <div class="formula-hero">
+          <div class="fx-big">F <span class="prop">∝</span> <span class="frac"><span class="num">q<sub>1</sub> q<sub>2</sub></span><span class="den">r<sup>2</sup></span></span></div>
+          <div class="fx-big fx-k">F = k <span class="frac"><span class="num">q<sub>1</sub> q<sub>2</sub></span><span class="den">r<sup>2</sup></span></span></div>
+        </div>
+        <dl class="symbols">
+          <div><dt>F</dt><dd>electric force between the charges (N)</dd></div>
+          <div><dt>q<sub>1</sub>, q<sub>2</sub></dt><dd>the two charges, in coulombs (C)</dd></div>
+          <div><dt>r</dt><dd>distance between the charges (m)</dd></div>
+          <div><dt>k</dt><dd>≈ 8.99 × 10<sup>9</sup> N·m²/C²</dd></div>
+        </dl>
+        <p class="note center">Unit of charge: the <strong>coulomb (C)</strong>. Like charges repel, unlike charges attract.</p>
+
+        <div class="coulomb">
+          <svg viewBox="0 0 720 220" id="coulomb-svg" role="img" aria-label="Two charges with force arrows"></svg>
+          <div class="coulomb-out" aria-live="polite">
+            <div class="co-f"><span>F</span> = <strong id="co-f">—</strong></div>
+            <div class="co-kind" id="co-kind">—</div>
+          </div>
+          <div class="sliders">
+            <label class="slider"><span class="sl-name">q<sub>1</sub></span><input type="range" id="sl-q1" min="-5" max="5" step="0.5" value="2"><output id="out-q1">+2.0 μC</output></label>
+            <label class="slider"><span class="sl-name">q<sub>2</sub></span><input type="range" id="sl-q2" min="-5" max="5" step="0.5" value="2"><output id="out-q2">+2.0 μC</output></label>
+            <label class="slider"><span class="sl-name">r</span><input type="range" id="sl-r" min="2" max="20" step="0.5" value="10"><output id="out-r">10.0 cm</output></label>
+          </div>
+          <div class="fr-plot">
+            <svg viewBox="0 0 640 300" id="fr-svg" role="img" aria-label="Force against distance curve"></svg>
+          </div>
+        </div>
+
+        <div class="link-box">
+          <h3>Link to this lab</h3>
+          <ul>
+            <li>Force per unit charge is the electric field: E = F / q. Field lines show its direction.</li>
+            <li>Potential difference is work per unit charge: V = W / q, in volts (1 V = 1 J/C).</li>
+            <li>Along an equipotential line ΔV = 0, so moving a charge along it needs no work. That is why field lines cross equipotentials at 90°.</li>
+            <li>Field strength ≈ ΔV / Δd: where equipotential lines are closer, the field is stronger.</li>
+          </ul>
+        </div>
+        <div class="page-end"><button type="button" class="btn-next" data-next>Next →</button></div>
+      </div>
+    </section>
+
+    <!-- ============ OBSERVATION ============ -->
+    <section class="view" id="view-observation" data-title="Observation &amp; graph">
+      <div class="sheet sheet-wide">
+        <h1 class="page-h">Observation &amp; graph</h1>
+        <p class="lede">Worked example. Tray 30 cm × 20 cm; <span class="minus">−</span> plate at x = 6 cm, <span class="plus">+</span> plate at x = 24 cm (both from y = 6 to 14 cm); 6 V battery; reference probe on the <span class="minus">−</span> plate.</p>
+        <div class="table-wrap">
+          <table class="obs-table" id="obs-table">
+            <thead><tr><th>V (volt)</th><th>(X<sub>1</sub>, Y<sub>1</sub>)</th><th>(X<sub>2</sub>, Y<sub>2</sub>)</th><th>(X<sub>3</sub>, Y<sub>3</sub>)</th><th>(X<sub>4</sub>, Y<sub>4</sub>)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="table-cap">Coordinates in cm, measured from the bottom-left corner of the tray.</p>
+        <div class="graph-wrap">
+          <svg viewBox="0 0 760 560" id="obs-graph" class="graph" role="img" aria-label="Graph of the four equipotential lines"></svg>
+        </div>
+        <ul class="reading-notes">
+          <li>Each row of the table is one equipotential line; the four points are joined by a smooth curve.</li>
+          <li>Between the plates the lines are almost straight and parallel to the plates.</li>
+          <li>Beyond the plate ends (y below 6 cm or above 14 cm) the lines bend outward and wrap toward the plate they are closest to.</li>
+          <li>The 1 V and 5 V lines stay close to their plates; a 3 V line would sit exactly midway at x = 15 cm.</li>
+        </ul>
+        <div class="page-end"><button type="button" class="btn-next" data-next>Next →</button></div>
+      </div>
+    </section>
+
+    <!-- ============ MCQ ============ -->
+    <section class="view" id="view-mcq" data-title="MCQs">
+      <div class="sheet">
+        <h1 class="page-h">MCQs</h1>
+        <div class="mcq-bar">
+          <div class="mcq-score" id="mcq-score">0 correct</div>
+          <button type="button" class="btn-quiet" id="mcq-reset">Reset &amp; reshuffle</button>
+        </div>
+        <ol class="mcq-list" id="mcq-list"></ol>
+        <div class="page-end"><button type="button" class="btn-next" data-next>Next →</button></div>
+      </div>
+    </section>
+
+    <!-- ============ PRACTICAL ============ -->
+    <section class="view" id="view-practical" data-title="Practical">
+      <div class="sheet sheet-xwide">
+        <h1 class="page-h">Practical</h1>
+        <p class="lede">Move the probe through the solution and watch the voltmeter. Click to record a point when the reading matches the target voltage of the highlighted row.</p>
+
+        <div class="bench">
+          <div class="tray-wrap" data-field>
+            <svg viewBox="0 0 660 470" id="tray" role="img" aria-label="Simulated tray with two plates in conducting solution"></svg>
+          </div>
+          <div class="meter-col">
+            <div class="dmm" aria-live="off">
+              <div class="dmm-head"><span>DC voltmeter</span><span class="dmm-range">DC · 0–6 V scale</span></div>
+              <div class="dmm-lcd"><span id="dmm-val">– – –</span><span class="dmm-unit">V</span></div>
+              <svg viewBox="0 0 240 70" class="dmm-scale" id="dmm-scale" aria-hidden="true"></svg>
+              <div class="dmm-ports"><span class="port com">COM · <span class="minus">−</span> plate</span><span class="port vp">V · probe</span></div>
+            </div>
+            <div class="target-box">
+              <div class="tb-row"><span class="tb-label">Target</span><strong id="tb-target">—</strong></div>
+              <div class="tb-row"><span class="tb-label">Reading − target</span><strong id="tb-diff">—</strong></div>
+              <p class="tb-msg" id="tb-msg" aria-live="polite"></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="pr-block">
+          <h2 class="sub-h">Target voltages <span class="sub-note">choose four</span></h2>
+          <div class="chips" id="chips"></div>
+        </div>
+
+        <div class="pr-block">
+          <h2 class="sub-h">Observation table</h2>
+          <div class="table-wrap">
+            <table class="obs-table live" id="pr-table">
+              <thead><tr><th>V (volt)</th><th>(X<sub>1</sub>, Y<sub>1</sub>)</th><th>(X<sub>2</sub>, Y<sub>2</sub>)</th><th>(X<sub>3</sub>, Y<sub>3</sub>)</th><th>(X<sub>4</sub>, Y<sub>4</sub>)</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="pr-block">
+          <h2 class="sub-h">Graph</h2>
+          <div class="graph-wrap">
+            <svg viewBox="0 0 760 560" id="pr-graph" class="graph" role="img" aria-label="Your equipotential lines on graph paper"></svg>
+          </div>
+        </div>
+
+        <div class="pr-controls">
+          <button type="button" class="toggle" id="pr-true-eq" aria-pressed="false">Show true equipotentials</button>
+          <button type="button" class="toggle" id="pr-true-fl" aria-pressed="false">Show field lines</button>
+          <button type="button" class="btn-quiet danger" id="pr-reset">Start over</button>
+        </div>
+
+        <div class="extras" id="extras">
+          <div class="extras-panel" id="extras-panel" role="region" aria-label="Optional extras">
+            <a href="https://grokipedia.com/page/Equipotential" target="_blank" rel="noopener">Equipotential — Grokipedia</a>
+            <a href="https://grokipedia.com/page/Electric_field" target="_blank" rel="noopener">Electric field — Grokipedia</a>
+            <a href="https://grokipedia.com/page/Defibrillation" target="_blank" rel="noopener">Defibrillation — Grokipedia</a>
+            <a href="https://www.youtube.com/watch?v=KyO1_DZnLgs" target="_blank" rel="noopener">Field lines &amp; equipotential lines — video (YouTube)</a>
+          </div>
+          <button type="button" class="extras-toggle" id="extras-toggle" aria-expanded="false" aria-controls="extras-panel">Optional extras</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="js/field-data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
