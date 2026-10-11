@@ -2,6 +2,11 @@
 (function () {
   'use strict';
 
+  /* tutorial clock: virtual milliseconds that stop while paused and run slower or faster with the speed setting */
+  const TC = { speed: 1, paused: false, base: 0, at: performance.now() };
+  function tnow() { const n = performance.now(); if (!TC.paused) TC.base += (n - TC.at) * TC.speed; TC.at = n; return TC.base; }
+  function tcSet(o) { tnow(); Object.assign(TC, o); }
+
   /* =====================================================================
      1. FIELD MODEL — potential in the tray (solved Laplace grid, js/field-data.js)
      ===================================================================== */
@@ -261,10 +266,11 @@
     return b;
   });
   let current = -1;
-  const onEnter = {};
+  const onEnter = {}, onLeave = {};
   function goTo(i, push) {
     i = Math.max(0, Math.min(views.length - 1, i));
     if (i === current) return;
+    if (current >= 0 && onLeave[ids[current]]) onLeave[ids[current]]();
     current = i;
     views.forEach((v, k) => v.classList.toggle('active', k === i));
     items.forEach((b, k) => {
@@ -815,7 +821,7 @@
     const CHOICES = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
     const DEFAULT_TARGETS = [1, 2, 4, 5];
     const TOL = 0.1;
-    let targets = [], points = {}, active = null, probe = null;
+    let targets = [], points = {}, active = null, probe = null, tutLinesHidden = false;
 
     const L = drawTrayBase(tray);
     drawReferenceLead(L.under);
@@ -923,6 +929,7 @@
       if (showFl()) drawFieldLinesSVG(G.under, gmap, { stroke: 'rgba(212,137,26,.75)', 'stroke-width': 1.5, 'stroke-dasharray': '6 5' }, true);
       if (showEq()) targets.forEach(v => drawContoursSVG(G.under, v, gmap, { stroke: vColor(v, .6), 'stroke-width': 2.2, 'stroke-dasharray': '2 5', 'stroke-linecap': 'round' }));
       targets.forEach(v => { const ps = (points[v] || []).map(p => [p.x, p.y]); if (ps.length) plotSet(G, v, ps); });
+      if (tutLinesHidden) G.lines.setAttribute('opacity', 0);
     }
     function updateMeter() {
       if (!probe) {
@@ -940,8 +947,8 @@
         const d = v - active, on = Math.abs(d) <= TOL;
         tbD.textContent = (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(2) + ' V';
         tbD.className = on ? 'ok' : '';
-        setReading('tray', fmtV(v) + ' V', on);
-      } else { tbD.textContent = '—'; tbD.className = ''; setReading('tray', fmtV(v) + ' V', false); }
+        if (!tut.on) setReading('tray', fmtV(v) + ' V', on);
+      } else { tbD.textContent = '—'; tbD.className = ''; if (!tut.on) setReading('tray', fmtV(v) + ' V', false); }
     }
     function refresh() {
       if (active != null && !targets.includes(active)) active = nextActive();
@@ -1001,6 +1008,192 @@
       say('', '');
       refresh();
     }
+
+    /* ---------- guided tutorial ---------- */
+    const tut = { on: false, cancel: false, skip: false };
+    const bar = document.getElementById('tut-bar'), tTitle = document.getElementById('tut-title'), tText = document.getElementById('tut-text'), tF = document.getElementById('tut-f');
+    const btnTut = document.getElementById('tut-start'), btnPause = document.getElementById('tut-pause'), selSpeed = document.getElementById('tut-speed');
+    const STOP = new Error('tutorial-stop');
+    const tutL = el('g', { 'pointer-events': 'none' }, L.top);
+    let pausedAnims = [];
+    function setPaused(p) {
+      tcSet({ paused: p });
+      btnPause.classList.toggle('paused', p); btnPause.setAttribute('aria-pressed', p ? 'true' : 'false');
+      btnPause.querySelector('.tl').textContent = p ? 'Resume' : 'Pause';
+      btnPause.title = p ? 'Resume (Space)' : 'Pause (Space)';
+      document.body.classList.toggle('tut-paused', p);
+      if (p) { pausedAnims = document.getAnimations().filter(a => a.playState === 'running'); pausedAnims.forEach(a => a.pause()); }
+      else { pausedAnims.forEach(a => { try { a.play(); } catch (_) { /* finished */ } }); pausedAnims = []; }
+    }
+    function resetPlayback() { setPaused(false); tcSet({ speed: 1 }); selSpeed.value = '1'; }
+    btnPause.addEventListener('click', () => { if (tut.on) setPaused(!TC.paused); });
+    selSpeed.addEventListener('change', () => { tcSet({ speed: +selSpeed.value || 1 }); });
+    document.addEventListener('keydown', e => {
+      if (!tut.on || e.code !== 'Space' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target.closest && e.target.closest('input, select, textarea, button, a, [role="button"], [tabindex]')) return;
+      e.preventDefault(); setPaused(!TC.paused);
+    });
+    const frame = () => new Promise(r => requestAnimationFrame(() => r()));
+    function wait(ms) {
+      return new Promise((res, rej) => {
+        const t0 = tnow();
+        (function w() { if (tut.cancel) return rej(STOP); if (tut.skip || tnow() - t0 >= ms) return res(); setTimeout(w, 25); })();
+      });
+    }
+    async function anim(ms, fn) {             // eased 0 → 1 on the tutorial clock
+      const t0 = tnow();
+      for (;;) {
+        if (tut.cancel) throw STOP;
+        let k = Math.min(1, (tnow() - t0) / ms); if (tut.skip) k = 1;
+        fn(k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
+        if (k >= 1) return;
+        await frame();
+      }
+    }
+    function step(title, text, f) { tut.skip = false; tTitle.textContent = title; tText.textContent = text; tF.textContent = f || ''; }
+    let hiEls = [];
+    function hi(...els) { hiEls.forEach(e => e.classList.remove('tut-hi')); hiEls = els.filter(Boolean); hiEls.forEach(e => e.classList.add('tut-hi')); }
+    async function scrollToEl(elm) {
+      const r = elm.getBoundingClientRect();
+      const y = Math.max(0, window.scrollY + r.top - Math.max(60, (window.innerHeight - Math.min(r.height, window.innerHeight - 220)) / 2 - 80));
+      const y0 = window.scrollY;
+      const go = anim(Math.min(900, 250 + Math.abs(y - y0) * .5), e => window.scrollTo({ top: y0 + (y - y0) * e, behavior: 'instant' }));
+      await go; await wait(250);
+    }
+    function locate(v, y) {                    // the field model: where on this row the potential equals v
+      let a = PLATE.neg.x + .1, b = PLATE.pos.x - .1;
+      for (let k = 0; k < 50; k++) { const m = (a + b) / 2; if (potential(m, y) < v) a = m; else b = m; }
+      return Math.round((a + b) / 2 * 10) / 10;
+    }
+    async function probeTo(p, ms) {
+      const p0 = probe ? probe.slice() : [p[0], p[1]];
+      await anim(ms, e => { probe = [p0[0] + (p[0] - p0[0]) * e, p0[1] + (p[1] - p0[1]) * e]; updateMeter(); });
+    }
+    function pendingMark(p, v) {
+      const q = tmap(p), c = vColor(v);
+      const g = el('g', null, tutL);
+      el('circle', { cx: q[0], cy: q[1], r: 11, fill: 'none', stroke: c, 'stroke-width': 1.6, 'stroke-dasharray': '3 3' }, g);
+      el('path', { d: `M${q[0] - 6} ${q[1] - 6}L${q[0] + 6} ${q[1] + 6}M${q[0] + 6} ${q[1] - 6}L${q[0] - 6} ${q[1] + 6}`, stroke: c, 'stroke-width': 3, 'stroke-linecap': 'round' }, g);
+      txt(g, q[0] + 14, q[1] - 10, `(${fmt1(p[0])}, ${fmt1(p[1])})`, { 'font-size': 15, 'font-weight': 700, fill: c, 'font-family': 'Sora, sans-serif' });
+      return g;
+    }
+    function plateTags() {
+      const g = el('g', null, tutL);
+      [['neg', '#2d4fa3', '0 V'], ['pos', '#c0402b', '6 V']].forEach(([k, c, s]) => {
+        const pl = PLATE[k], a = tmap([pl.x, (pl.y0 + pl.y1) / 2]);
+        el('rect', { x: a[0] - 30, y: a[1] - 15, width: 60, height: 30, rx: 8, fill: '#fff', stroke: c, 'stroke-width': 2 }, g);
+        txt(g, a[0], a[1] + 6, s, { 'text-anchor': 'middle', 'font-size': 16, 'font-weight': 700, fill: c, 'font-family': 'Sora, sans-serif' });
+      });
+      return g;
+    }
+    async function drawLines() {               // trace each plotted line on the graph, one voltage at a time
+      tutLinesHidden = false; renderGraph();
+      const paths = Array.from(graph.querySelectorAll('path[stroke-width="3"]'));
+      paths.forEach(pth => { const n = pth.getTotalLength(); pth.style.strokeDasharray = n; pth.style.strokeDashoffset = n; });
+      for (let i = 0; i < paths.length; i++) {
+        const v = targets[i], n = paths[i].getTotalLength();
+        step('Draw the equipotential line', `A smooth curve through the four ${fmtLabel(v)} points. Every point on it is at the same potential.`, `V = ${fmtLabel(v)}`);
+        await anim(1500, e => { paths[i].style.strokeDashoffset = n * (1 - e); });
+        await wait(500);
+      }
+      paths.forEach(pth => { pth.style.strokeDasharray = ''; pth.style.strokeDashoffset = ''; });
+    }
+    function rightAngle(v, y) {                // a small square where a field line crosses the equipotential
+      const x = locate(v, y), gv = gradV(x, y), m = Math.hypot(gv[0], gv[1]) || 1;
+      const f = [-gv[0] / m, -gv[1] / m], t = [-f[1], f[0]], s = .7;
+      const P = (a, b) => gmap([x + a[0] * s + b[0] * s, y + a[1] * s + b[1] * s]);
+      const q0 = gmap([x, y]), q1 = P(f, [0, 0]), q2 = P(f, t), q3 = P([0, 0], t);
+      const g = el('g', null, graph);
+      el('path', { d: `M${q1[0]} ${q1[1]}L${q2[0]} ${q2[1]}L${q3[0]} ${q3[1]}`, fill: 'none', stroke: '#1c2541', 'stroke-width': 2 }, g);
+      el('circle', { cx: q0[0], cy: q0[1], r: 3.5, fill: '#1c2541' }, g);
+      return g;
+    }
+    async function tutorial() {
+      tut.on = true; tut.cancel = false; document.body.classList.add('tut-on'); bar.hidden = false; btnTut.disabled = true;
+      const bench = document.querySelector('.bench'), dmm = document.querySelector('.dmm'), tbox = document.querySelector('.target-box');
+      const tblWrap = document.querySelector('#pr-table').closest('.pr-block'), gWrap = graph.closest('.pr-block');
+      try {
+        reset(); setReading('tray', null); tutL.innerHTML = ''; tutLinesHidden = true; renderGraph();
+        await scrollToEl(bench); hi(bench);
+        step('The setup', 'Two metal plates stand in a tray of weak conducting solution. Electrodes at x = 6 cm and x = 24 cm, both from y = 6 to 14 cm.', '');
+        await wait(2800);
+        step('Connect the supply', 'The supply holds the − plate at 0 V and the + plate at 6 V, so a steady current flows through the solution.', '− plate: 0 V · + plate: 6 V');
+        const tags = plateTags(); await wait(3200);
+        hi(dmm);
+        step('Connect the voltmeter', 'COM goes to the − plate; the probe goes to V. The meter then reads the potential of the point the probe touches.', '');
+        await wait(3000);
+        tags.remove();
+        hi(chipsBox);
+        await scrollToEl(chipsBox);
+        step('Choose the target voltages', 'Four targets between the plate voltages, one equipotential line each.', 'targets: 1 V, 2 V, 4 V, 5 V');
+        await wait(2600);
+        for (const v of targets.slice()) {
+          active = v; refresh();
+          await scrollToEl(bench); hi(bench, tbox);
+          step(`Target ${fmtLabel(v)}`, `Find four points where the voltmeter reads ${fmtLabel(v)}, spread from the bottom of the tray to the top.`, `target = ${fmtLabel(v)}`);
+          await wait(1800);
+          const found = [];
+          for (const y of [4, 8, 12, 16]) {
+            const x = locate(v, y), start = Math.max(1, Math.min(W - 1, x + (found.length % 2 ? 3.2 : -3.2)));
+            step('Move the probe', `Slide the probe along y = ${y} cm and watch the reading.`, `y = ${y} cm`);
+            await probeTo([start, y], found.length ? 700 : 1000);
+            const r0 = potential(start, y);
+            tF.textContent = `${fmtV(r0)} V: ${r0 < v ? 'too low, move toward the + plate' : 'too high, move toward the − plate'}`;
+            await wait(600);
+            const over = x + (x > start ? .7 : -.7);
+            await probeTo([over, y], 1500);
+            tF.textContent = `${fmtV(potential(over, y))} V: just past the target, ease back`;
+            await wait(500);
+            await probeTo([x, y], 700);
+            const rv = potential(x, y);
+            step('Reading matches', `The reading is within 0.1 V of the target. Mark the point and note its coordinates.`, `${fmtV(rv)} V at (${fmt1(x)}, ${fmt1(y)})`);
+            pendingMark([x, y], v); found.push([x, y]);
+            await wait(1300);
+          }
+          probe = null; updateMeter();
+          await scrollToEl(tblWrap); hi(tblWrap);
+          step('Fill the table', `Write the four ${fmtLabel(v)} points into the table, one cell at a time.`, '');
+          await wait(900);
+          for (let k = 0; k < found.length; k++) {
+            record(found[k]);
+            const cellRow = Array.from(tbody.querySelectorAll('tr')).find(tr => tr.querySelector('.vtag') && tr.querySelector('.vtag').textContent === v.toFixed(1));
+            const td = cellRow && cellRow.children[k + 1];
+            if (td) hi(tblWrap, td);
+            tF.textContent = `(X${k + 1}, Y${k + 1}) = (${fmt1(found[k][0])}, ${fmt1(found[k][1])})`;
+            await wait(1000);
+          }
+          tutL.innerHTML = '';
+          hi(); await wait(400);
+        }
+        await scrollToEl(gWrap); hi(gWrap);
+        step('Plot the points', 'Each row of the table is plotted on graph paper with the plates drawn in.', '');
+        await wait(1800);
+        await drawLines();
+        hi(bEq, gWrap);
+        step('Compare with the true lines', 'The dashed curves are the true equipotentials from the field model. The plotted lines follow them closely.', '');
+        bEq.setAttribute('aria-pressed', 'true'); renderTrayMarks(); renderGraph();
+        await wait(3600);
+        hi(bFl, gWrap);
+        step('Field lines', 'The amber field lines run from the + plate to the − plate and cross every equipotential at right angles.', 'field lines ⟂ equipotentials');
+        bFl.setAttribute('aria-pressed', 'true'); renderTrayMarks(); renderGraph();
+        rightAngle(2, 10); rightAngle(4, 10);
+        await wait(4200);
+        hi();
+        step('Done', 'Four equipotential lines mapped and checked against the field model. Start over to map them by hand.', '');
+        await wait(4000);
+      } catch (e) {
+        if (e !== STOP) throw e;
+      } finally {
+        tut.on = false; tut.skip = false; resetPlayback(); hi(); tutL.innerHTML = '';
+        tutLinesHidden = false; probe = null; updateMeter(); renderGraph();
+        document.body.classList.remove('tut-on'); bar.hidden = true; btnTut.disabled = false;
+      }
+    }
+    btnTut.addEventListener('click', () => { if (!tut.on) tutorial(); });
+    document.getElementById('tut-stop').addEventListener('click', () => { tut.cancel = true; });
+    document.getElementById('tut-skip').addEventListener('click', () => { tut.skip = true; });
+    onLeave.practical = () => { if (tut.on) tut.cancel = true; };
+
     document.getElementById('pr-reset').addEventListener('click', reset);
     reset();
     window.__practical = { state: () => ({ targets: targets.slice(), points: JSON.parse(JSON.stringify(points)), active }) };

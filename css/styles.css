@@ -321,3 +321,45 @@ input[type=range]{width:100%;accent-color:var(--blue);height:28px}
   .view{display:block !important;page-break-after:always}
   .sheet{box-shadow:none;border:0}
 }
+
+/* ---------- guided tutorial ---------- */
+.tut-launch{display:flex;justify-content:center;margin:-8px 0 24px}
+.btn-tut{display:inline-flex;align-items:center;gap:8px;background:var(--ink);color:#fdfaf3;border:0;border-radius:999px;padding:11px 22px;font:600 .82rem/1 var(--head);cursor:pointer;box-shadow:0 6px 16px -8px rgba(28,37,65,.6)}
+.btn-tut:hover{background:var(--blue)}
+.btn-tut:disabled{opacity:.45;cursor:default}
+.tut-hi{outline:3px solid var(--amber)!important;outline-offset:4px;border-radius:12px;animation:tutGlow 1.4s ease-in-out infinite}
+@keyframes tutGlow{50%{outline-color:rgba(212,137,26,.35)}}
+body.tut-paused .tut-hi{animation-play-state:paused}
+body.tut-on .bench,body.tut-on .chips,body.tut-on #pr-table,body.tut-on .pr-controls{pointer-events:none}
+body.tut-on .stage{padding-bottom:190px}
+.tut-bar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:450;width:min(780px,calc(100vw - 24px));display:flex;gap:16px;align-items:center;background:rgba(28,37,65,.96);color:#f5f1e8;border-radius:16px;padding:14px 16px 14px 20px;box-shadow:0 18px 40px -12px rgba(0,0,0,.45);font-family:var(--body)}
+.tut-bar[hidden]{display:none}
+@media (min-width:981px){.tut-bar{left:calc(50% + 125px);width:min(780px,calc(100vw - 290px))}}
+.tut-main{flex:1 1 auto;min-width:0}
+.tut-title{font:600 11px/1 var(--head);letter-spacing:.16em;text-transform:uppercase;color:#f0b75a}
+.tut-text{font-size:16px;line-height:1.45;margin-top:5px}
+.tut-f{font:600 15px/1.4 var(--head);color:#bccbf0;margin-top:4px;overflow-wrap:anywhere}
+.tut-f:empty{display:none}
+.tut-ctl{display:grid;grid-template-columns:auto auto;gap:8px;flex:0 0 auto;align-items:stretch}
+.tut-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:10px;padding:9px 14px;font:600 14px/1 var(--body);cursor:pointer}
+.tut-btn:hover{background:rgba(255,255,255,.18)}
+.tut-btn.stop{background:var(--red);border-color:var(--red)}
+.tut-btn.stop:hover{background:#a3351f}
+.tut-pause .ti{width:14px;height:14px;fill:currentColor;flex:0 0 auto}
+.tut-pause .i-play{display:none}
+.tut-pause.paused .i-pause{display:none}
+.tut-pause.paused .i-play{display:inline}
+.tut-pause.paused{background:var(--amber);border-color:var(--amber);color:#1c2541}
+.tut-speed{display:inline-flex;align-items:center;gap:7px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:0 6px 0 11px;font:600 13px/1 var(--body);color:rgba(255,255,255,.78)}
+.tut-speed select{appearance:none;-webkit-appearance:none;background:transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 6px center/10px 6px;border:0;color:#fff;font:600 14px/1 var(--body);padding:8px 22px 8px 4px;cursor:pointer;border-radius:6px}
+.tut-speed select:focus-visible{outline:2px solid var(--amber);outline-offset:1px}
+.tut-speed option{color:#1c2541;background:#fff}
+@media (max-width:980px){
+  .tut-bar{flex-direction:column;align-items:stretch;gap:10px;padding:12px 14px}
+  .tut-ctl{justify-content:flex-end}
+}
+@media (max-width:640px){
+  .tut-ctl{display:flex;flex-wrap:wrap;justify-content:flex-end}
+  .tut-ctl > *{flex:1 1 calc(50% - 4px)}
+}
+

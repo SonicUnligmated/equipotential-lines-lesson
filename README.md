@@ -15,7 +15,7 @@ https://sonicunligmated.github.io/equipotential-lines-lesson/
 5. Formula (Coulomb's law explorer: q1, q2, r → F)
 6. Observation & graph (example table + graph, generated from the field model)
 7. MCQs (20 questions, choices reshuffled on load / reset)
-8. Practical (simulated tray, voltmeter, record points, graph, true lines, start over)
+8. Practical (simulated tray, voltmeter, record points, graph, true lines, start over, guided tutorial with pause and speed controls)
 
 ## Physics model
 
