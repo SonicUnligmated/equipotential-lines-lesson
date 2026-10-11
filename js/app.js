@@ -232,7 +232,7 @@
     svg.innerHTML = '';
     const SZ = 2 * BOARD * GS;
     el('rect', { x: 0, y: 0, width: 640, height: 640, fill: '#fbfdf9', rx: 12 }, svg);
-    const cid = 'gclip-' + (svg.id || 'g') + '-' + (++graphClipN);
+    const cid = 'gclip-' + (svg.id || 'g' + (++graphClipN));
     el('rect', { x: GX0, y: GY0, width: SZ, height: SZ }, el('clipPath', { id: cid }, el('defs', null, svg)));
     const g = el('g', null, svg);
     for (let k = 0; k <= 2 * BOARD * 5; k++) {          // 2 mm squares, bold every 1 cm
@@ -1151,7 +1151,7 @@
     }
 
     /* ---------- guided tutorial ---------- */
-    const tut = { on: false, cancel: false, skip: false };
+    const tut = { on: false, cancel: false, skip: false, idx: -1, ff: false, target: 0, restartTo: null, gen: 0, plan: null };
     const bar = document.getElementById('tut-bar'), tTitle = document.getElementById('tut-title'), tText = document.getElementById('tut-text'), tF = document.getElementById('tut-f');
     const btnTut = document.getElementById('tut-start'), btnPause = document.getElementById('tut-pause'), selSpeed = document.getElementById('tut-speed');
     const STOP = new Error('tutorial-stop');
@@ -1191,7 +1191,7 @@
         await frame();
       }
     }
-    function step(title, text, f) { tut.skip = false; tTitle.textContent = title; tText.textContent = text; tF.textContent = f || ''; }
+    function step(title, text, f) { navStep(); tTitle.textContent = title; tText.textContent = text; tF.textContent = f || ''; }
     let hiEls = [];
     function hi(...els) { hiEls.forEach(e => e.classList.remove('tut-hi')); hiEls = els.filter(Boolean); hiEls.forEach(e => e.classList.add('tut-hi')); }
     async function scrollToEl(elm) {
@@ -1275,11 +1275,11 @@
       bEq.setAttribute('aria-pressed', 'false'); bFl.setAttribute('aria-pressed', 'false');
       buildTable(); say('', ''); refresh();
     }
-    async function tutorial() {
-      tut.on = true; tut.cancel = false; document.body.classList.add('tut-on'); bar.hidden = false; btnTut.disabled = true;
+    async function tutorial(target) {
+      tut.on = true; tut.cancel = false; navBegin(target); document.body.classList.add('tut-on'); bar.hidden = false; btnTut.disabled = true;
       const bench = document.querySelector('.bench'), dmm = document.querySelector('.dmm'), tbox = document.querySelector('.target-box');
       const tblWrap = table.closest('.pr-block'), gWrap = graph.closest('.pr-block');
-      const plan = tutorialPlan(), list = plan.list;
+      const plan = (target === undefined || !tut.plan) ? (tut.plan = tutorialPlan()) : tut.plan, list = plan.list;
       try {
         applyPlan(plan); setReading('tray', null); tutL.innerHTML = ''; tutLinesHidden = true; renderGraph();
         await scrollToEl(bench); hi(bench);
@@ -1357,16 +1357,69 @@
       } catch (e) {
         if (e !== STOP) throw e;
       } finally {
-        tut.on = false; tut.skip = false; resetPlayback(); hi(); tutL.innerHTML = '';
+        const again = tut.restartTo; tut.restartTo = null; tut.gen++; tut.ff = false; document.body.classList.remove('tut-ff');
+        tut.on = false; tut.skip = false; if (again == null) resetPlayback(); hi(); tutL.innerHTML = '';
         tbody.querySelectorAll('.typing').forEach(i => i.classList.remove('typing'));
         syncInputs();
         tutLinesHidden = false; probe = null; updateMeter(); renderGraph();
-        document.body.classList.remove('tut-on'); bar.hidden = true; btnTut.disabled = false;
+        if (again == null) { document.body.classList.remove('tut-on'); bar.hidden = true; btnTut.disabled = false; tut.plan = null; }
+        updNav();
+        if (again != null) setTimeout(() => tutorial(again), 0);
       }
     }
     btnTut.addEventListener('click', () => { if (!tut.on) tutorial(); });
-    document.getElementById('tut-stop').addEventListener('click', () => { tut.cancel = true; });
-    document.getElementById('tut-skip').addEventListener('click', () => { tut.skip = true; });
+    document.getElementById('tut-stop').addEventListener('click', () => { tut.restartTo = null; tut.cancel = true; tut.gen++; });
+    /* ---------- step navigation: Previous re-runs the tutorial instantly up to the step before, Next finishes the current step ---------- */
+    const btnPrevS = document.getElementById('tut-prev'), btnNextS = document.getElementById('tut-next');
+    function updNav() { bar.dataset.step = tut.idx; if (btnPrevS) btnPrevS.disabled = !tut.on || (tut.restartTo != null ? tut.restartTo : tut.ff ? tut.target : tut.idx) <= 0; }
+    function freezeNew() {                    // keep animations created by a jump frozen while paused
+      const more = document.getAnimations().filter(a => a.playState === 'running');
+      more.forEach(a => a.pause()); pausedAnims.push(...more);
+    }
+    function navBegin(target) {
+      const prac = document.getElementById('view-practical');
+      if (target === undefined) {                // remember the status messages as they were when the run started
+        tut.live = Array.from(prac.querySelectorAll('[aria-live="polite"]')).filter(e => !bar.contains(e) && !e.querySelector('svg, canvas, input, button, select')).map(e => [e, e.innerHTML, e.className]);
+      } else if (tut.live) tut.live.forEach(([e, h, c]) => { e.innerHTML = h; e.className = c; });
+      if (target !== undefined) {                // short effects frozen by a pause belong to the cancelled run: let them end now
+        pausedAnims = pausedAnims.filter(a => {
+          let finite = false; try { finite = a.effect && a.effect.getComputedTiming().endTime !== Infinity; } catch (_) { /* ignore */ }
+          if (finite) { try { a.finish(); } catch (_) { /* ignore */ } }
+          return !finite;
+        });
+      }
+      tut.idx = -1; tut.target = target || 0; tut.ff = tut.target > 0; tut.skip = tut.ff; tut.restartTo = null;
+      document.body.classList.toggle('tut-ff', tut.ff); updNav();
+    }
+    function navStep() {
+      tut.idx++;
+      if (tut.ff && tut.idx >= tut.target) { tut.ff = false; document.body.classList.remove('tut-ff'); }
+      tut.skip = tut.ff;
+      if (TC.paused && !tut.ff) requestAnimationFrame(freezeNew);
+      updNav();
+    }
+    function navPrev() {
+      if (!tut.on && tut.restartTo == null) return;
+      if (tut.restartTo != null) tut.restartTo = Math.max(0, tut.restartTo - 1);
+      else if (tut.ff) tut.target = Math.max(0, tut.target - 1);
+      else { if (tut.idx <= 0) return; tut.restartTo = tut.idx - 1; tut.cancel = true; tut.gen++; }
+      updNav();
+    }
+    function navNext() {
+      if (!tut.on && tut.restartTo == null) return;
+      if (tut.restartTo != null) tut.restartTo++;
+      else if (tut.ff) tut.target++;
+      else tut.skip = true;
+      updNav();
+    }
+    if (btnPrevS) btnPrevS.addEventListener('click', navPrev);
+    if (btnNextS) btnNextS.addEventListener('click', navNext);
+    document.addEventListener('keydown', e => {
+      if (!tut.on || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      const t = e.target;
+      if (t.closest && t.closest('select, textarea, [contenteditable], input[type="range"], [role="slider"], [role="spinbutton"], [tabindex]:not(button):not(a):not(input)')) return;   // instrument controls keep their arrow keys
+      e.preventDefault(); if (e.key === 'ArrowLeft') navPrev(); else navNext();
+    });
     onLeave.practical = () => { if (tut.on) tut.cancel = true; };
 
     document.getElementById('pr-reset').addEventListener('click', () => { if (!tut.on) reset(); });

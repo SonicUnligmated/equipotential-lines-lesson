@@ -393,3 +393,16 @@ body.tut-on .stage{padding-bottom:190px}
 .auto-key{display:inline-block;font:italic 500 .82rem/1 var(--head);color:#4f6a9a;background:#f2f5fb;border:1px dashed var(--rule-2);border-radius:5px;padding:3px 6px;margin-right:4px}
 body.tut-on .table-tools{pointer-events:none}
 .table-wrap{position:relative}
+
+/* tutorial step navigation: Previous / Next on the first row, Pause · Speed · Stop below */
+.tut-ctl{display:grid;grid-template-columns:repeat(6,auto);gap:8px}
+.tut-ctl > #tut-prev{grid-column:span 3;order:-2}
+.tut-ctl > #tut-next{grid-column:span 3;order:-1}
+.tut-ctl > .tut-pause,.tut-ctl > .tut-speed,.tut-ctl > .stop{grid-column:span 2}
+.tut-btn:disabled{opacity:.38;cursor:default}
+.tut-btn:disabled:hover{background:rgba(255,255,255,.1)}
+@media (max-width:640px){
+  .tut-ctl{display:grid;grid-template-columns:repeat(6,minmax(0,1fr))}
+  .tut-ctl > *{flex:none;min-width:0}
+  .tut-ctl .tut-btn{padding-left:8px;padding-right:8px}
+}
