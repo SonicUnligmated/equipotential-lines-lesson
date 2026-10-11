@@ -73,7 +73,7 @@
             <div class="cr-item"><span class="cr-swatch fl"></span>Field line through the probe</div>
           </div>
           <div class="toggle-row">
-            <button type="button" class="toggle" id="concept-all-eq" aria-pressed="true">Equipotentials every 0.5 V</button>
+            <button type="button" class="toggle" id="concept-all-eq" aria-pressed="true">Equipotentials every 0.3 V</button>
             <button type="button" class="toggle" id="concept-all-fl" aria-pressed="false">Field lines</button>
           </div>
         </div>
@@ -95,7 +95,7 @@
             </ul>
           </div>
         </div>
-        <p class="note">Two equipotential lines never cross: one point cannot have two different potentials. Between the middle of the two plates the lines are almost straight and evenly spaced (a nearly uniform field); beyond the plate ends they bend outward.</p>
+        <p class="note">Two equipotential lines never cross: one point cannot have two different potentials. Midway between the two plates the equipotential is a straight line; the others curve around the plate they are closer to, and they crowd together near each plate, where the field is strongest.</p>
         <div class="page-end"><button type="button" class="btn-next" data-next>Next →</button></div>
       </div>
     </section>
@@ -158,10 +158,10 @@
             </figure>
             <figure class="sf" data-fig="1"><svg viewBox="0 0 660 470" id="fig-step1" role="img" aria-label="Reference probe clipped on the negative plate, measuring probe in the solution"></svg>
               <figcaption>The reference lead stays on the <span class="minus">−</span> plate (0 V). The meter shows the potential of wherever the probe tip touches.</figcaption></figure>
-            <figure class="sf" data-fig="2"><svg viewBox="0 0 660 470" id="fig-step2" role="img" aria-label="Four points that all read 2.0 V"></svg>
-              <figcaption>Move the probe until the meter reads the chosen value (here 2.0 V), note (x, y), then find more points with the same reading.</figcaption></figure>
+            <figure class="sf" data-fig="2"><svg viewBox="0 0 660 470" id="fig-step2" role="img" aria-label="Four points that all read 1.9 V"></svg>
+              <figcaption>Move the probe until the meter reads the chosen value (here 1.9 V), note (x, y), then find more points with the same reading.</figcaption></figure>
             <figure class="sf" data-fig="3"><svg viewBox="0 0 660 470" id="fig-step3" role="img" aria-label="Points for four different potentials"></svg>
-              <figcaption>Repeat for three more values (here 1, 4 and 5 V), giving four sets of points.</figcaption></figure>
+              <figcaption>Repeat for three more values (here 1.8, 2.0 and 2.1 V), giving four sets of points.</figcaption></figure>
             <figure class="sf" data-fig="4"><svg viewBox="0 0 660 470" id="fig-step4" role="img" aria-label="Smooth equipotential lines drawn through each set of points"></svg>
               <figcaption>Tabulate the points, then join each set with a smooth curve and label it with its voltage.</figcaption></figure>
           </div>
@@ -219,22 +219,22 @@
     <section class="view" id="view-observation" data-title="Observation &amp; graph">
       <div class="sheet sheet-wide">
         <h1 class="page-h">Observation &amp; graph</h1>
-        <p class="lede">Example values. Tray 30 cm × 20 cm; <span class="minus">−</span> plate at x = 6 cm, <span class="plus">+</span> plate at x = 24 cm (both from y = 6 to 14 cm); 6 V battery; reference probe on the <span class="minus">−</span> plate.</p>
+        <p class="lede">Example values. Two small plates in a wide tray of conducting solution: <span class="minus">−</span> plate at x = −10 cm, <span class="plus">+</span> plate at x = +10 cm (both centred on y = 0); 3.9 V supply; reference probe on the <span class="minus">−</span> plate. The graph board runs from −5 to +5 cm in x and y, with the origin at its centre.</p>
         <div class="table-wrap">
           <table class="obs-table" id="obs-table">
             <thead><tr><th>V (volt)</th><th>(X<sub>1</sub>, Y<sub>1</sub>)</th><th>(X<sub>2</sub>, Y<sub>2</sub>)</th><th>(X<sub>3</sub>, Y<sub>3</sub>)</th><th>(X<sub>4</sub>, Y<sub>4</sub>)</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
-        <p class="table-cap">Coordinates in cm, measured from the bottom-left corner of the tray.</p>
+        <p class="table-cap">Coordinates in cm, measured from the centre of the board (x and y from −5 to +5).</p>
         <div class="graph-wrap">
-          <svg viewBox="0 0 760 560" id="obs-graph" class="graph" role="img" aria-label="Graph of the four equipotential lines"></svg>
+          <svg viewBox="0 0 640 640" id="obs-graph" class="graph" role="img" aria-label="Graph of the four equipotential lines"></svg>
         </div>
         <ul class="reading-notes">
           <li>Each row of the table is one equipotential line; the four points are joined by a smooth curve.</li>
-          <li>Between the plates the lines are almost straight and parallel to the plates.</li>
-          <li>Beyond the plate ends (y below 6 cm or above 14 cm) the lines bend outward and wrap toward the plate they are closest to.</li>
-          <li>The 1 V and 5 V lines stay close to their plates; a 3 V line would sit exactly midway at x = 15 cm.</li>
+          <li>The lines run roughly up and down the board, across the line joining the plates.</li>
+          <li>Each line curves gently around the plate it is closer to: the 1.8 V line bows toward the − plate, the 2.1 V line toward the + plate.</li>
+          <li>The centre of the board, midway between the plates, sits at 1.95 V (half of the 3.9 V supply); a 1.95 V line would run straight along x = 0.</li>
         </ul>
         <div class="page-end"><button type="button" class="btn-next" data-next>Next →</button></div>
       </div>
@@ -257,7 +257,7 @@
     <section class="view" id="view-practical" data-title="Practical">
       <div class="sheet sheet-xwide">
         <h1 class="page-h">Practical</h1>
-        <p class="lede">Move the probe through the solution and watch the voltmeter. Click to record a point when the reading matches the target voltage of the highlighted row.</p>
+        <p class="lede">Set target voltages between 1.7 and 2.2 V in the table. Move the probe over the board and watch the voltmeter; click to record a point when the reading matches the highlighted row. Pressing Enter in a row fills its remaining points from the field model.</p>
         <div class="tut-launch"><button type="button" class="btn-tut" id="tut-start"><svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true"><path d="M6 4l10 6-10 6z" fill="currentColor"/></svg>Start tutorial</button></div>
 
         <div class="bench">
@@ -266,7 +266,7 @@
           </div>
           <div class="meter-col">
             <div class="dmm" aria-live="off">
-              <div class="dmm-head"><span>DC voltmeter</span><span class="dmm-range">DC · 0–6 V scale</span></div>
+              <div class="dmm-head"><span>DC voltmeter</span><span class="dmm-range">DC · 0–4 V scale</span></div>
               <div class="dmm-lcd"><span id="dmm-val">– – –</span><span class="dmm-unit">V</span></div>
               <svg viewBox="0 0 240 70" class="dmm-scale" id="dmm-scale" aria-hidden="true"></svg>
               <div class="dmm-ports"><span class="port com">COM · <span class="minus">−</span> plate</span><span class="port vp">V · probe</span></div>
@@ -280,24 +280,20 @@
         </div>
 
         <div class="pr-block">
-          <h2 class="sub-h">Target voltages <span class="sub-note">choose four</span></h2>
-          <div class="chips" id="chips"></div>
-        </div>
-
-        <div class="pr-block">
-          <h2 class="sub-h">Observation table</h2>
+          <h2 class="sub-h">Observation table <span class="sub-note">V from 1.7 to 2.2 · x, y from −5 to 5 cm</span></h2>
           <div class="table-wrap">
             <table class="obs-table live" id="pr-table">
-              <thead><tr><th>V (volt)</th><th>(X<sub>1</sub>, Y<sub>1</sub>)</th><th>(X<sub>2</sub>, Y<sub>2</sub>)</th><th>(X<sub>3</sub>, Y<sub>3</sub>)</th><th>(X<sub>4</sub>, Y<sub>4</sub>)</th></tr></thead>
+              <thead><tr><th>V (volt)</th><th>(x<sub>1</sub>, y<sub>1</sub>)</th><th>(x<sub>2</sub>, y<sub>2</sub>)</th><th>(x<sub>3</sub>, y<sub>3</sub>)</th><th>(x<sub>4</sub>, y<sub>4</sub>)</th><th><span class="sr-only">Remove</span></th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
+          <div class="table-tools"><button type="button" class="btn-quiet" id="pr-add-row">+ Add row</button><span class="table-key"><span class="auto-key">1.5</span> filled from the field model; editing a cell makes it a typed value</span></div>
         </div>
 
         <div class="pr-block">
           <h2 class="sub-h">Graph</h2>
           <div class="graph-wrap">
-            <svg viewBox="0 0 760 560" id="pr-graph" class="graph" role="img" aria-label="Recorded equipotential lines on graph paper"></svg>
+            <svg viewBox="0 0 640 640" id="pr-graph" class="graph" role="img" aria-label="Recorded equipotential lines on graph paper"></svg>
           </div>
         </div>
 
@@ -331,7 +327,6 @@
   </div>
 </div>
 
-<script src="js/field-data.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

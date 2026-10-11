@@ -8,27 +8,40 @@
   function tcSet(o) { tnow(); Object.assign(TC, o); }
 
   /* =====================================================================
-     1. FIELD MODEL — potential in the tray (solved Laplace grid, js/field-data.js)
+     1. FIELD MODEL — two small plates in a wide, shallow tray of solution
+     Each plate is modelled as a thin conductor of equivalent radius A (a strip of
+     height 4A). For two parallel conductors of radius A whose centres are 2D apart,
+     the exact 2-D potential is that of two line charges at x = ±B, B = √(D² − A²):
+       V(x, y) = VBAT/2 + VBAT · ln(r₋ / r₊) / (2 · acosh(D / A))
+     The − plate is at 0 V (reference) and the + plate at VBAT.
      ===================================================================== */
-  const F = window.FIELD;
-  const H = F.h, NX = F.nx, NY = F.ny, W = F.W, HT = F.H;
-  const VG = F.V;
-  const PLATE = { neg: { x: 6, y0: 6, y1: 14, v: 0 }, pos: { x: 24, y0: 6, y1: 14, v: 6 } };
-  const VBAT = 6;
+  const VBAT = 3.9, PD = 10, PA = 0.3, PB = Math.sqrt(PD * PD - PA * PA), PK = Math.acosh(PD / PA);
+  const PLATE = { neg: { x: -PD, y0: -2 * PA, y1: 2 * PA, v: 0 }, pos: { x: PD, y0: -2 * PA, y1: 2 * PA, v: VBAT } };
+  const BOARD = 5;                         // graph board: x and y from −5 to +5 cm
+  const VMIN = 1.7, VMAX = 2.2;            // target equipotentials inside the board
+  const XMIN = -12, XMAX = 12, YMIN = -8, YMAX = 8, H = 0.1;   // modelled region for drawing
+  const NX = Math.round((XMAX - XMIN) / H) + 1, NY = Math.round((YMAX - YMIN) / H) + 1;
 
-  function node(i, j) { return VG[j * NX + i]; }
   function potential(x, y) {
-    x = Math.min(Math.max(x, 0), W); y = Math.min(Math.max(y, 0), HT);
-    const fx = x / H, fy = y / H;
-    const i = Math.min(Math.floor(fx), NX - 2), j = Math.min(Math.floor(fy), NY - 2);
-    const tx = fx - i, ty = fy - j;
-    return node(i, j) * (1 - tx) * (1 - ty) + node(i + 1, j) * tx * (1 - ty) +
-           node(i, j + 1) * (1 - tx) * ty + node(i + 1, j + 1) * tx * ty;
+    const rm = Math.max(1e-6, Math.hypot(x + PB, y)), rp = Math.max(1e-6, Math.hypot(x - PB, y));
+    const v = VBAT / 2 + VBAT * Math.log(rm / rp) / (2 * PK);
+    return Math.min(VBAT, Math.max(0, v));
   }
   function gradV(x, y) {
-    const d = 0.04;
+    const d = 0.02;
     return [(potential(x + d, y) - potential(x - d, y)) / (2 * d), (potential(x, y + d) - potential(x, y - d)) / (2 * d)];
   }
+  const VG = new Float32Array(NX * NY);
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) VG[j * NX + i] = potential(XMIN + i * H, YMIN + j * H);
+  function node(i, j) { return VG[j * NX + i]; }
+  /* x where the potential equals v on the row y, inside the board (null if the line misses the board there) */
+  function locateX(v, y) {
+    let a = -BOARD, b = BOARD;
+    if (potential(a, y) > v || potential(b, y) < v) return null;
+    for (let k = 0; k < 50; k++) { const m = (a + b) / 2; if (potential(m, y) < v) a = m; else b = m; }
+    return (a + b) / 2;
+  }
+  const r1 = v => Math.round(v * 10) / 10 + 0;
 
   /* Marching squares on any grid. get(i,j) value; returns chained polylines in grid index coords. */
   function contourGrid(get, nx, ny, level) {
@@ -76,9 +89,10 @@
   }
   const contourCache = new Map();
   function trayContours(level) {
-    const key = level.toFixed(3);
+    const key = level.toFixed(4);
     if (!contourCache.has(key)) {
-      contourCache.set(key, contourGrid(node, NX, NY, level).map(l => l.map(p => [p[0] * H, p[1] * H])));
+      if (contourCache.size > 60) contourCache.clear();
+      contourCache.set(key, contourGrid(node, NX, NY, level).map(l => l.map(p => [XMIN + p[0] * H, YMIN + p[1] * H])));
     }
     return contourCache.get(key);
   }
@@ -87,47 +101,44 @@
     const out = [[x, y]], ds = 0.08;
     for (let s = 0; s < (maxSteps || 1600); s++) {
       let g = gradV(x, y), m = Math.hypot(g[0], g[1]);
-      if (m < 1e-4) break;
+      if (m < 1e-5) break;
       const mx = x - dir * ds * 0.5 * g[0] / m, my = y - dir * ds * 0.5 * g[1] / m;
       g = gradV(mx, my); m = Math.hypot(g[0], g[1]);
-      if (m < 1e-4) break;
+      if (m < 1e-5) break;
       x -= dir * ds * g[0] / m; y -= dir * ds * g[1] / m;
-      if (x < 0.02 || x > W - 0.02 || y < 0.02 || y > HT - 0.02) break;
+      if (x < XMIN || x > XMAX || y < YMIN || y > YMAX) break;
       out.push([x, y]);
-      const v = potential(x, y);
-      if (dir > 0 && v < 0.02) break;
-      if (dir < 0 && v > VBAT - 0.02) break;
+      if (Math.hypot(x + PD, y) < PA * 1.2 || Math.hypot(x - PD, y) < PA * 1.2) break;
     }
     return out;
   }
   let FIELD_LINES = null;
-  function trayFieldLines() {
+  function trayFieldLines() {             // field lines through evenly spaced points on the centre line x = 0
     if (FIELD_LINES) return FIELD_LINES;
-    const seeds = [];
-    for (let y = 6.4; y <= 13.7; y += 1.05) seeds.push([23.7, y]);
-    seeds.push([24, 14.35], [24, 5.65], [24.35, 13.2], [24.35, 6.8], [23.2, 14.5], [23.2, 5.5]);
-    FIELD_LINES = seeds.map(s => streamline(s[0], s[1], 1, 2400)).filter(l => l.length > 8);
+    FIELD_LINES = [-7, -5.4, -4, -2.8, -1.7, -0.8, 0, 0.8, 1.7, 2.8, 4, 5.4, 7]
+      .map(y => streamline(0, y, -1, 3000).reverse().concat(streamline(0, y, 1, 3000).slice(1)))
+      .filter(l => l.length > 8);
     return FIELD_LINES;
   }
 
-  /* Worked example — generated from the same field model */
-  const WORKED = [
-    { v: 1, pts: [[6.4, 2], [8.5, 7], [8.6, 12], [6.9, 17]] },
-    { v: 2, pts: [[11.1, 2], [11.6, 7], [11.7, 12], [11.2, 17]] },
-    { v: 4, pts: [[18.9, 2], [18.4, 7], [18.3, 12], [18.8, 17]] },
-    { v: 5, pts: [[23.6, 2], [21.5, 7], [21.4, 12], [23.1, 17]] }
-  ];
+  /* Worked example — generated from the same field model, points read to 0.1 cm */
+  const SPREAD_Y = [-4.5, -1.5, 1.5, 4.5];
+  const WORKED = [1.8, 1.9, 2.0, 2.1].map(v => ({ v, pts: SPREAD_Y.map(y => [r1(locateX(v, y)), y]) }));
 
-  /* colour for a potential: ink-blue (0 V) → violet → red (6 V) */
-  function vColor(v, a) {
-    const t = Math.min(Math.max(v / VBAT, 0), 1);
+  /* colour for a potential: ink-blue (1.7 V and below) → violet → red (2.2 V and above);
+     full = true spreads the same ramp over the whole 0 V … VBAT range */
+  function vColor(v, a, full) {
+    const t = full ? Math.min(Math.max(v / VBAT, 0), 1) : Math.min(Math.max((v - VMIN) / (VMAX - VMIN), 0), 1);
     const c0 = [45, 79, 163], c1 = [124, 62, 140], c2 = [192, 64, 43];
     const c = t < 0.5 ? c0.map((q, k) => q + (c1[k] - q) * t * 2) : c1.map((q, k) => q + (c2[k] - q) * (t - 0.5) * 2);
     return a == null ? `rgb(${c.map(Math.round).join(',')})` : `rgba(${c.map(Math.round).join(',')},${a})`;
   }
-  const fmt1 = v => (Math.round(v * 10) / 10).toFixed(1);
+  const MINUS = '\u2212';
+  const fmt1 = v => { const r = Math.round(v * 10) / 10; return (r < 0 ? MINUS : '') + Math.abs(r).toFixed(1); };
   const fmtV = v => v.toFixed(2);
-  const fmtLabel = v => (Number.isInteger(v) ? String(v) : v.toFixed(1)) + ' V';
+  const fmtT = v => (Math.abs(v * 10 - Math.round(v * 10)) < 1e-6 ? v.toFixed(1) : v.toFixed(2));
+  const fmtLabel = v => fmtT(v) + ' V';
+  const fmtTick = n => (n < 0 ? MINUS : '') + Math.abs(n);
 
   /* =====================================================================
      2. SVG HELPERS
@@ -161,23 +172,36 @@
     el('path', { d: 'M-5 -4 L4 0 L-5 4 Z', fill: color, transform: `translate(${a[0].toFixed(1)} ${a[1].toFixed(1)}) rotate(${ang.toFixed(1)})` }, parent);
   }
 
-  /* ---------- tray drawing (viewBox 660 × 470, 20 px per cm) ---------- */
-  const TS = 20, TX0 = 30, TY0 = 30;
-  const tmap = p => [TX0 + p[0] * TS, TY0 + (HT - p[1]) * TS];
+  /* ---------- tray drawing (viewBox 660 × 470, 28 px per cm, x −11…11, y −7…7 cm shown) ---------- */
+  const TS = 28, TX0 = 22, TY0 = 22, TXL = -11, TXR = 11, TYB = -7, TYT = 7;
+  const tmap = p => [TX0 + (p[0] - TXL) * TS, TY0 + (TYT - p[1]) * TS];
   function drawTrayBase(svg) {
     svg.innerHTML = '';
     const defs = el('defs', null, svg);
     const lg = el('linearGradient', { id: svg.id + '-sol', x1: 0, y1: 0, x2: 1, y2: 0 }, defs);
     el('stop', { offset: '0', 'stop-color': '#e3ebf7' }, lg); el('stop', { offset: '.5', 'stop-color': '#eef1ee' }, lg); el('stop', { offset: '1', 'stop-color': '#f6e8e2' }, lg);
-    el('rect', { x: TX0 - 8, y: TY0 - 8, width: W * TS + 16, height: HT * TS + 16, rx: 14, fill: '#d9d2c2' }, svg);
-    el('rect', { x: TX0, y: TY0, width: W * TS, height: HT * TS, rx: 6, fill: `url(#${svg.id}-sol)` }, svg);
-    const g = el('g', { stroke: '#b9c6d8', opacity: .55 }, svg);
-    for (let x = 1; x < W; x++) el('line', { x1: TX0 + x * TS, y1: TY0, x2: TX0 + x * TS, y2: TY0 + HT * TS, 'stroke-width': x % 5 ? .5 : 1 }, g);
-    for (let y = 1; y < HT; y++) el('line', { x1: TX0, y1: TY0 + y * TS, x2: TX0 + W * TS, y2: TY0 + y * TS, 'stroke-width': y % 5 ? .5 : 1 }, g);
-    const rl = el('g', { fill: '#6a7186', 'font-size': 14, 'font-family': 'Source Sans 3, sans-serif' }, svg);
-    for (let x = 0; x <= W; x += 5) txt(rl, TX0 + x * TS, TY0 + HT * TS + 24, String(x), { 'text-anchor': 'middle' });
-    for (let y = 5; y <= HT; y += 5) txt(rl, TX0 - 14, TY0 + (HT - y) * TS + 4, String(y), { 'text-anchor': 'end' });
-    const layers = { under: el('g', null, svg), lines: el('g', null, svg), plates: el('g', null, svg), marks: el('g', null, svg), top: el('g', null, svg) };
+    const cp = el('clipPath', { id: svg.id + '-clip' }, defs);
+    const TW = (TXR - TXL) * TS, THh = (TYT - TYB) * TS;
+    el('rect', { x: TX0, y: TY0, width: TW, height: THh, rx: 6 }, cp);
+    el('rect', { x: TX0 - 8, y: TY0 - 8, width: TW + 16, height: THh + 16, rx: 14, fill: '#d9d2c2' }, svg);
+    el('rect', { x: TX0, y: TY0, width: TW, height: THh, rx: 6, fill: `url(#${svg.id}-sol)` }, svg);
+    const b0 = tmap([-BOARD, BOARD]), b1 = tmap([BOARD, -BOARD]);
+    el('rect', { x: b0[0], y: b0[1], width: b1[0] - b0[0], height: b1[1] - b0[1], fill: '#ffffff', opacity: .45, stroke: '#9fb0c8', 'stroke-width': 1.2 }, svg);
+    const g = el('g', { stroke: '#b9c6d8', opacity: .7 }, svg);
+    for (let k = -BOARD + 1; k < BOARD; k++) {
+      const X = tmap([k, 0])[0], Y = tmap([0, k])[1];
+      el('line', { x1: X, y1: b0[1], x2: X, y2: b1[1], 'stroke-width': k === 0 ? 1.4 : .6, stroke: k === 0 ? '#8496b3' : null }, g);
+      el('line', { x1: b0[0], y1: Y, x2: b1[0], y2: Y, 'stroke-width': k === 0 ? 1.4 : .6, stroke: k === 0 ? '#8496b3' : null }, g);
+    }
+    const rl = el('g', { fill: '#6a7186', 'font-size': 13, 'font-family': 'Source Sans 3, sans-serif' }, svg);
+    for (let k = -BOARD; k <= BOARD; k++) {
+      txt(rl, tmap([k, 0])[0], b1[1] + 17, fmtTick(k), { 'text-anchor': 'middle' });
+      txt(rl, b0[0] - 8, tmap([0, k])[1] + 4, fmtTick(k), { 'text-anchor': 'end' });
+    }
+    txt(rl, b1[0] + 8, b1[1] + 17, 'x (cm)', { 'font-weight': 600 });
+    txt(rl, b0[0] - 8, b0[1] - 12, 'y (cm)', { 'text-anchor': 'end', 'font-weight': 600 });
+    const clip = { 'clip-path': `url(#${svg.id}-clip)` };
+    const layers = { under: el('g', clip, svg), lines: el('g', clip, svg), plates: el('g', null, svg), marks: el('g', null, svg), top: el('g', null, svg) };
     drawPlates(layers.plates);
     return layers;
   }
@@ -195,44 +219,49 @@
   function drawFieldLinesSVG(g, map, attrs, arrows) {
     trayFieldLines().forEach(l => {
       el('path', Object.assign({ d: polyD(l, map), fill: 'none' }, attrs), g);
-      if (arrows) arrowAt(g, l, map, attrs.stroke, 0.45);
+      if (arrows) arrowAt(g, l, map, attrs.stroke, 0.36);
     });
   }
 
-  /* ---------- graph paper (viewBox 760 × 540) ---------- */
-  const GS = 21, GX0 = 92, GY0 = 50;
-  const gmap = p => [GX0 + p[0] * GS, GY0 + (HT - p[1]) * GS];
+  /* ---------- graph paper (viewBox 640 × 640, 50 px per cm, x and y −5…5 cm) ---------- */
+  const GS = 50, GX0 = 80, GY0 = 40;
+  const gmap = p => [GX0 + (p[0] + BOARD) * GS, GY0 + (BOARD - p[1]) * GS];
+  let graphClipN = 0;
   function drawGraphBase(svg) {
-    svg.setAttribute('viewBox', '0 0 760 540');
+    svg.setAttribute('viewBox', '0 0 640 640');
     svg.innerHTML = '';
-    el('rect', { x: 0, y: 0, width: 760, height: 540, fill: '#fbfdf9', rx: 12 }, svg);
+    const SZ = 2 * BOARD * GS;
+    el('rect', { x: 0, y: 0, width: 640, height: 640, fill: '#fbfdf9', rx: 12 }, svg);
+    const cid = 'gclip-' + (svg.id || 'g') + '-' + (++graphClipN);
+    el('rect', { x: GX0, y: GY0, width: SZ, height: SZ }, el('clipPath', { id: cid }, el('defs', null, svg)));
     const g = el('g', null, svg);
-    for (let x = 0; x <= W * 2; x++) {
-      const X = GX0 + x * GS / 2, maj = x % 10 === 0, mid = x % 2 === 0;
-      el('line', { x1: X, y1: GY0, x2: X, y2: GY0 + HT * GS, stroke: maj ? '#86c897' : mid ? '#bfe2c7' : '#e0f1e3', 'stroke-width': maj ? 1.2 : .8 }, g);
+    for (let k = 0; k <= 2 * BOARD * 5; k++) {          // 2 mm squares, bold every 1 cm
+      const X = GX0 + k * GS / 5, Y = GY0 + k * GS / 5, cmLine = k % 5 === 0;
+      const st = { stroke: cmLine ? '#a9d8b4' : '#e0f1e3', 'stroke-width': cmLine ? 1 : .7 };
+      el('line', Object.assign({ x1: X, y1: GY0, x2: X, y2: GY0 + SZ }, st), g);
+      el('line', Object.assign({ x1: GX0, y1: Y, x2: GX0 + SZ, y2: Y }, st), g);
     }
-    for (let y = 0; y <= HT * 2; y++) {
-      const Y = GY0 + y * GS / 2, maj = y % 10 === 0, mid = y % 2 === 0;
-      el('line', { x1: GX0, y1: Y, x2: GX0 + W * GS, y2: Y, stroke: maj ? '#86c897' : mid ? '#bfe2c7' : '#e0f1e3', 'stroke-width': maj ? 1.2 : .8 }, g);
-    }
-    el('line', { x1: GX0, y1: GY0 + HT * GS, x2: GX0 + W * GS + 14, y2: GY0 + HT * GS, stroke: '#1c2541', 'stroke-width': 1.8 }, svg);
-    el('line', { x1: GX0, y1: GY0 + HT * GS, x2: GX0, y2: GY0 - 14, stroke: '#1c2541', 'stroke-width': 1.8 }, svg);
-    el('path', { d: `M${GX0 + W * GS + 20} ${GY0 + HT * GS} l-9 -5 v10 z`, fill: '#1c2541' }, svg);
-    el('path', { d: `M${GX0} ${GY0 - 20} l-5 9 h10 z`, fill: '#1c2541' }, svg);
+    el('rect', { x: GX0, y: GY0, width: SZ, height: SZ, fill: 'none', stroke: '#86c897', 'stroke-width': 1.4 }, svg);
+    const o = gmap([0, 0]);
+    el('line', { x1: GX0, y1: o[1], x2: GX0 + SZ, y2: o[1], stroke: '#1c2541', 'stroke-width': 1.6 }, svg);
+    el('line', { x1: o[0], y1: GY0, x2: o[0], y2: GY0 + SZ, stroke: '#1c2541', 'stroke-width': 1.6 }, svg);
     const lab = el('g', { fill: '#3c4663', 'font-size': 15, 'font-family': 'Source Sans 3, sans-serif' }, svg);
-    for (let x = 0; x <= W; x += 5) txt(lab, GX0 + x * GS, GY0 + HT * GS + 24, String(x), { 'text-anchor': 'middle' });
-    for (let y = 5; y <= HT; y += 5) txt(lab, GX0 - 12, GY0 + (HT - y) * GS + 5, String(y), { 'text-anchor': 'end' });
-    txt(lab, GX0 - 12, GY0 + HT * GS + 5, '0', { 'text-anchor': 'end' });
-    const ax = el('g', { fill: '#1c2541', 'font-size': 17, 'font-weight': 600, 'font-family': 'Sora, sans-serif' }, svg);
-    txt(ax, GX0 + W * GS, GY0 + HT * GS + 52, 'X (cm) →', { 'text-anchor': 'end' });
-    txt(ax, GX0 - 14, GY0 - 26, 'Y (cm)', { 'text-anchor': 'middle' });
-    const pl = el('g', null, svg);
-    [['neg', '#2d4fa3', '−'], ['pos', '#c0402b', '+']].forEach(([k, c, s]) => {
-      const p = PLATE[k], a = gmap([p.x, p.y1]), b = gmap([p.x, p.y0]);
-      el('rect', { x: a[0] - 3, y: a[1], width: 6, height: b[1] - a[1], rx: 2, fill: c, opacity: .8 }, pl);
-      txt(pl, a[0], a[1] - 8, s, { 'text-anchor': 'middle', fill: c, 'font-size': 20, 'font-weight': 700, 'font-family': 'Sora, sans-serif' });
-    });
-    return { under: el('g', null, svg), lines: el('g', null, svg), pts: el('g', null, svg), labels: el('g', null, svg) };
+    for (let k = -BOARD; k <= BOARD; k++) {
+      const X = gmap([k, 0])[0], Y = gmap([0, k])[1];
+      el('line', { x1: X, y1: o[1] - 5, x2: X, y2: o[1] + 5, stroke: '#1c2541', 'stroke-width': 1.4 }, svg);
+      el('line', { x1: o[0] - 5, y1: Y, x2: o[0] + 5, y2: Y, stroke: '#1c2541', 'stroke-width': 1.4 }, svg);
+      txt(lab, X, GY0 + SZ + 22, fmtTick(k), { 'text-anchor': 'middle' });
+      txt(lab, GX0 - 12, Y + 5, fmtTick(k), { 'text-anchor': 'end' });
+    }
+    const ax = el('g', { fill: '#1c2541', 'font-size': 16, 'font-weight': 600, 'font-family': 'Sora, sans-serif' }, svg);
+    txt(ax, GX0 + SZ, GY0 + SZ + 46, 'x (cm)', { 'text-anchor': 'end' });
+    txt(ax, GX0 - 12, GY0 - 14, 'y (cm)', { 'text-anchor': 'middle' });
+    const pl = el('g', { 'font-size': 14, 'font-family': 'Source Sans 3, sans-serif', fill: '#3c4663' }, svg);
+    el('rect', { x: GX0, y: GY0 + SZ + 66, width: 6, height: 18, rx: 2, fill: '#2d4fa3' }, pl);
+    txt(pl, GX0 + 12, GY0 + SZ + 80, '− plate at x = −10 cm (left)');
+    el('rect', { x: GX0 + SZ - 6, y: GY0 + SZ + 66, width: 6, height: 18, rx: 2, fill: '#c0402b' }, pl);
+    txt(pl, GX0 + SZ - 12, GY0 + SZ + 80, '+ plate at x = +10 cm (right)', { 'text-anchor': 'end' });
+    return { under: el('g', { 'clip-path': `url(#${cid})` }, svg), lines: el('g', null, svg), pts: el('g', null, svg), labels: el('g', null, svg) };
   }
   function plotSet(layers, v, pts) {
     const col = vColor(v);
@@ -245,7 +274,7 @@
     });
     if (sp.length) {
       const top = sp[sp.length - 1];
-      txt(layers.labels, top[0], top[1] - 14, fmtLabel(v), { 'text-anchor': 'middle', fill: col, 'font-size': 22, 'font-weight': 700, class: 'hand' });
+      txt(layers.labels, top[0], top[1] - 14, fmtLabel(v), { 'text-anchor': 'middle', fill: col, 'font-size': 20, 'font-weight': 700, class: 'hand' });
     }
   }
 
@@ -411,12 +440,12 @@
      ===================================================================== */
   (function aimHero() {
     const svg = document.getElementById('aim-hero');
-    const sx = 660 / W, sy = 260 / HT;
-    const m = p => [p[0] * sx, 260 - p[1] * sy];
+    const S = 660 / (XMAX - XMIN);
+    const m = p => [(p[0] - XMIN) * S, 130 - p[1] * S];
     el('rect', { width: 660, height: 260, rx: 14, fill: '#fbf9f3', stroke: '#e4dccb' }, svg);
     const g = el('g', null, svg);
     drawFieldLinesSVG(g, m, { stroke: 'rgba(212,137,26,.55)', 'stroke-width': 1.4, 'stroke-dasharray': '5 5' }, true);
-    for (let v = 0.5; v < 6; v += 0.5) drawContoursSVG(g, v, m, { stroke: vColor(v, .85), 'stroke-width': Number.isInteger(v) ? 2.2 : 1.1 });
+    for (let k = 1; k <= 12; k++) { const v = k * 0.3; drawContoursSVG(g, v, m, { stroke: vColor(v, .85, true), 'stroke-width': k % 2 ? 1.1 : 2.2 }); }
     [['neg', '#2d4fa3'], ['pos', '#c0402b']].forEach(([k, c]) => {
       const p = PLATE[k], a = m([p.x, p.y1]), b = m([p.x, p.y0]);
       el('rect', { x: a[0] - 4, y: a[1], width: 8, height: b[1] - a[1], rx: 2, fill: c }, svg);
@@ -429,12 +458,12 @@
   (function concept() {
     const cv = document.getElementById('concept-canvas');
     const ctx = cv.getContext('2d');
-    const S = cv.width / W;
-    const cm = p => [p[0] * S, cv.height - p[1] * S];
+    const S = cv.width / (XMAX - XMIN);
+    const cm = p => [(p[0] - XMIN) * S, cv.height / 2 - p[1] * S];
     const outV = document.getElementById('concept-v');
     const bEq = document.getElementById('concept-all-eq'), bFl = document.getElementById('concept-all-fl');
     let probe = null;
-    const DEFAULT = [10.5, 16.5];
+    const DEFAULT = [-2.5, 3.5];
     function path(l) { ctx.beginPath(); l.forEach((p, k) => { const q = cm(p); k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }); }
     function draw() {
       const p = probe || DEFAULT;
@@ -442,8 +471,9 @@
       g.addColorStop(0, '#e6edf8'); g.addColorStop(.5, '#f2f3ef'); g.addColorStop(1, '#f8ebe6');
       ctx.fillStyle = g; ctx.fillRect(0, 0, cv.width, cv.height);
       if (bEq.getAttribute('aria-pressed') === 'true') {
-        for (let v = 0.5; v < 6; v += 0.5) {
-          ctx.strokeStyle = vColor(v, .38); ctx.lineWidth = 2;
+        for (let k = 1; k <= 12; k++) {
+          const v = k * 0.3;
+          ctx.strokeStyle = vColor(v, .38, true); ctx.lineWidth = 2;
           trayContours(v).forEach(l => { path(l); ctx.stroke(); });
         }
       }
@@ -455,7 +485,7 @@
       [['neg', '#2d4fa3', '−'], ['pos', '#c0402b', '+']].forEach(([k, c, s]) => {
         const P = PLATE[k], a = cm([P.x, P.y1]), b = cm([P.x, P.y0]);
         ctx.fillStyle = c; ctx.fillRect(a[0] - 7, a[1], 14, b[1] - a[1]);
-        ctx.font = '700 44px Sora, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(s, a[0], a[1] - 18);
+        ctx.font = '700 44px Sora, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(s, a[0], a[1] - 22);
       });
       const v = potential(p[0], p[1]);
       const onPlate = v < 0.03 || v > VBAT - 0.03;
@@ -463,8 +493,8 @@
         const fl = streamline(p[0], p[1], -1, 1600).reverse().concat(streamline(p[0], p[1], 1, 1600));
         ctx.strokeStyle = '#d4891a'; ctx.lineWidth = 5; ctx.setLineDash([16, 12]);
         path(fl); ctx.stroke(); ctx.setLineDash([]);
-        ctx.strokeStyle = vColor(v); ctx.lineWidth = 6; ctx.lineCap = 'round';
-        contourGrid(node, NX, NY, v).forEach(l => { path(l.map(q => [q[0] * H, q[1] * H])); ctx.stroke(); });
+        ctx.strokeStyle = vColor(v, null, true); ctx.lineWidth = 6; ctx.lineCap = 'round';
+        contourGrid(node, NX, NY, v).forEach(l => { path(l.map(q => [XMIN + q[0] * H, YMIN + q[1] * H])); ctx.stroke(); });
         const gr = gradV(p[0], p[1]), mg = Math.hypot(gr[0], gr[1]) || 1;
         const u = [gr[0] / mg, gr[1] / mg], n = [-u[1], u[0]], L = 0.75;
         const q0 = cm(p), q1 = cm([p[0] + u[0] * L, p[1] + u[1] * L]), q2 = cm([p[0] + (u[0] + n[0]) * L, p[1] + (u[1] + n[1]) * L]), q3 = cm([p[0] + n[0] * L, p[1] + n[1] * L]);
@@ -473,12 +503,12 @@
         ctx.fillStyle = '#1c2541'; ctx.beginPath(); ctx.arc(q0[0], q0[1], 8, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(q0[0], q0[1], 3.5, 0, Math.PI * 2); ctx.fill();
       }
-      outV.textContent = onPlate ? (v < 1 ? '0.00 V (on the − plate)' : '6.00 V (on the + plate)') : fmtV(v) + ' V';
-      outV.style.color = vColor(v);
+      outV.textContent = onPlate ? (v < 1 ? '0.00 V (on the − plate)' : fmtV(VBAT) + ' V (on the + plate)') : fmtV(v) + ' V';
+      outV.style.color = vColor(v, null, true);
     }
     function toCm(e) {
       const r = cv.getBoundingClientRect();
-      return [(e.clientX - r.left) / r.width * W, HT - (e.clientY - r.top) / r.height * HT];
+      return [XMIN + (e.clientX - r.left) / r.width * (XMAX - XMIN), YMAX - (e.clientY - r.top) / r.height * (YMAX - YMIN)];
     }
     let raf = 0;
     cv.addEventListener('pointermove', e => {
@@ -569,12 +599,13 @@
     const q = tmap(p), c = vColor(v);
     el('circle', { cx: q[0], cy: q[1], r: 6, fill: '#fff', stroke: c, 'stroke-width': 2.5 }, g);
     el('circle', { cx: q[0], cy: q[1], r: 2, fill: c }, g);
-    if (label) txt(g, q[0] + 12, q[1] + 7, `(${fmt1(p[0])}, ${fmt1(p[1])})`, { 'font-size': 24, 'font-weight': 700, fill: c, class: 'hand' });
+    if (label) txt(g, q[0] + 12, q[1] + 7, `(${fmt1(p[0])}, ${fmt1(p[1])})`, { 'font-size': 21, 'font-weight': 700, fill: c, class: 'hand' });
   }
   function drawReferenceLead(g, end) {
     const a = tmap([PLATE.neg.x, PLATE.neg.y0]);
-    const e = end || [640, TY0 + HT * TS - 30];
-    el('path', { d: `M${a[0]} ${a[1] + 2} C${a[0]} ${a[1] + 120} ${e[0] - 220} ${TY0 + HT * TS + 10} ${e[0]} ${e[1]}`, fill: 'none', stroke: '#1c2541', 'stroke-width': 2.2 }, g);
+    const BOT = TY0 + (TYT - TYB) * TS;
+    const e = end || [640, BOT - 30];
+    el('path', { d: `M${a[0]} ${a[1] + 2} C${a[0]} ${a[1] + 120} ${e[0] - 220} ${BOT + 10} ${e[0]} ${e[1]}`, fill: 'none', stroke: '#1c2541', 'stroke-width': 2.2 }, g);
     el('rect', { x: a[0] - 7, y: a[1] - 6, width: 14, height: 12, rx: 3, fill: '#1c2541' }, g);
   }
   function drawProbeGlyph(g, p, end) {
@@ -593,7 +624,7 @@
     }));
     const s1 = document.getElementById('fig-step1');
     const L1 = drawTrayBase(s1);
-    const pp = [12, 10], pv = potential(pp[0], pp[1]);
+    const pp = [1.5, 2.5], pv = potential(pp[0], pp[1]);
     drawReferenceLead(L1.top, [548, 412]);
     drawProbeGlyph(L1.top, pp, [612, 368]);
     const meter = el('g', { transform: 'translate(580 402)' }, L1.top);
@@ -603,11 +634,11 @@
     txt(meter, 0, 22, 'voltmeter', { 'text-anchor': 'middle', 'font-size': 11, fill: '#b9c1d9', 'font-family': 'Sora, sans-serif' });
     const s2 = document.getElementById('fig-step2');
     const L2 = drawTrayBase(s2);
-    WORKED[1].pts.forEach(p => markPoint(L2.marks, p, 2, true));
+    WORKED[1].pts.forEach(p => markPoint(L2.marks, p, WORKED[1].v, true));
     const s3 = document.getElementById('fig-step3');
     const L3 = drawTrayBase(s3);
     WORKED.forEach(r => r.pts.forEach(p => markPoint(L3.marks, p, r.v, false)));
-    WORKED.forEach(r => { const t = tmap(r.pts[3]); txt(L3.marks, t[0], t[1] - 18, fmtLabel(r.v), { 'text-anchor': 'middle', 'font-size': 28, 'font-weight': 700, fill: vColor(r.v), class: 'hand' }); });
+    WORKED.forEach((r, i) => { const t = tmap(r.pts[i % 2 ? 0 : 3]); txt(L3.marks, t[0], t[1] + (i % 2 ? 30 : -14), fmtLabel(r.v), { 'text-anchor': 'middle', 'font-size': 20, 'font-weight': 700, fill: vColor(r.v), class: 'hand' }); });
     const s4 = document.getElementById('fig-step4');
     const G = drawGraphBase(s4);
     WORKED.forEach(r => plotSet(G, r.v, r.pts));
@@ -715,7 +746,7 @@
     const tb = document.querySelector('#obs-table tbody');
     WORKED.forEach(r => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td><span class="vtag"><i style="background:${vColor(r.v)}"></i>${r.v.toFixed(1)}</span></td>` +
+      tr.innerHTML = `<td><span class="vtag"><i style="background:${vColor(r.v)}"></i>${fmtT(r.v)}</span></td>` +
         r.pts.map(p => `<td>(${fmt1(p[0])}, ${fmt1(p[1])})</td>`).join('');
       tb.appendChild(tr);
     });
@@ -755,10 +786,10 @@
       hint: 'Think E ≈ ΔV / Δd.', ex: 'The same ΔV over a smaller distance means a larger field: E ≈ ΔV / Δd.' },
     { q: 'Why can two equipotential lines never cross?', a: 'A point cannot have two different potentials', o: ['Field lines would block them', 'The voltmeter cannot read there', 'The solution would short-circuit'],
       hint: 'What would the voltmeter read at the crossing point?', ex: 'At a crossing point the potential would have two values at once, which is impossible.' },
-    { q: 'Between the middle sections of two parallel plates, the equipotential lines are…', a: 'almost straight and parallel to the plates', o: ['circles around each plate', 'perpendicular to the plates', 'randomly shaped'],
-      hint: 'The field there is nearly uniform.', ex: 'In the nearly uniform region between the plates, equipotentials are straight lines parallel to the plates; they bend near the plate ends.' },
-    { q: 'With a 6 V battery and the reference on the − plate, a point exactly midway between the plates reads about…', a: '3 V', o: ['0 V', '6 V', '12 V'],
-      hint: 'The potential rises from 0 V at one plate to 6 V at the other.', ex: 'By symmetry, the midline is the 3 V equipotential (x = 15 cm in the worked example).' },
+    { q: 'In this setup, the equipotential lines between 1.7 V and 2.2 V on the board…', a: 'curve gently around the plate they are closer to', o: ['are circles centred on the origin', 'run parallel to the x-axis', 'cross each other near the centre'],
+      hint: 'Look at the shape of the 1.8 V and 2.1 V lines in the example graph.', ex: 'Each line bows around the nearer plate; only the 1.95 V line through the middle (x = 0) is straight.' },
+    { q: 'With a 3.9 V supply and the reference on the − plate, the centre of the board (0, 0), midway between the plates, reads about…', a: '1.95 V', o: ['0 V', '3.9 V', '7.8 V'],
+      hint: 'The potential rises from 0 V at one plate to 3.9 V at the other.', ex: 'By symmetry, the centre line x = 0 is the 1.95 V equipotential, half of the 3.9 V supply.' },
     { q: 'The electric field points from…', a: 'higher potential to lower potential', o: ['lower potential to higher potential', 'one point to another along an equipotential', 'the voltmeter to the battery'],
       hint: 'A positive charge moves "downhill" in potential.', ex: 'Field lines run from the + plate (high potential) to the − plate (low potential).' },
     { q: 'What does a defibrillator do?', a: 'Delivers a high-energy electric shock to the heart', o: ['Measures blood pressure', 'Records brain waves', 'Supplies oxygen to the lungs'],
@@ -812,16 +843,18 @@
   (function practical() {
     const tray = document.getElementById('tray');
     const graph = document.getElementById('pr-graph');
-    const tbody = document.querySelector('#pr-table tbody');
-    const chipsBox = document.getElementById('chips');
+    const table = document.getElementById('pr-table');
+    const tbody = table.querySelector('tbody');
     const dmmVal = document.getElementById('dmm-val');
     const scale = document.getElementById('dmm-scale');
     const tbT = document.getElementById('tb-target'), tbD = document.getElementById('tb-diff'), msg = document.getElementById('tb-msg');
     const bEq = document.getElementById('pr-true-eq'), bFl = document.getElementById('pr-true-fl');
-    const CHOICES = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
-    const DEFAULT_TARGETS = [1, 2, 4, 5];
-    const TOL = 0.1;
-    let targets = [], points = {}, active = null, probe = null, tutLinesHidden = false;
+    const btnAdd = document.getElementById('pr-add-row');
+    const DEFAULT_TARGETS = [1.8, 1.9, 2.0, 2.1];
+    const MAX_ROWS = 6, TOL = 0.02;
+    const blankPt = () => ({ x: '', y: '', ax: false, ay: false });
+    const blankRow = v => ({ v: v == null ? '' : String(v), p: [blankPt(), blankPt(), blankPt(), blankPt()] });
+    let rows = [], active = 0, probe = null, tutLinesHidden = false;
 
     const L = drawTrayBase(tray);
     drawReferenceLead(L.under);
@@ -829,22 +862,23 @@
     const wire = el('path', { fill: 'none', stroke: '#c0402b', 'stroke-width': 2.2 }, probeG);
     const ring = el('circle', { r: 7, fill: 'none', stroke: '#1c2541', 'stroke-width': 2 }, probeG);
     const dotP = el('circle', { r: 2.5, fill: '#d4891a' }, probeG);
-    el('rect', { x: TX0, y: TY0, width: W * TS, height: HT * TS, fill: 'transparent' }, tray);
+    el('rect', { x: TX0, y: TY0, width: (TXR - TXL) * TS, height: (TYT - TYB) * TS, fill: 'transparent' }, tray);
 
     (function buildScale() {
-      const cx = 120, cy = 66, R = 54;
-      const ang = v => Math.PI * (1 - v / VBAT);
+      const cx = 120, cy = 66, R = 54, FS = 4;
+      const ang = v => Math.PI * (1 - v / FS);
       el('path', { d: `M${cx - R} ${cy} A${R} ${R} 0 0 1 ${cx + R} ${cy}`, fill: 'none', stroke: '#59607a', 'stroke-width': 2 }, scale);
-      for (let v = 0; v <= 6; v += 0.5) {
-        const a = ang(v), r1 = Number.isInteger(v) ? R - 9 : R - 5;
-        el('line', { x1: cx + R * Math.cos(a), y1: cy - R * Math.sin(a), x2: cx + r1 * Math.cos(a), y2: cy - r1 * Math.sin(a), stroke: '#b9c1d9', 'stroke-width': Number.isInteger(v) ? 1.6 : 1 }, scale);
-        if (Number.isInteger(v)) txt(scale, cx + (R + 9) * Math.cos(a), cy - (R + 9) * Math.sin(a) + 3, String(v), { 'text-anchor': 'middle', 'font-size': 9, fill: '#b9c1d9', 'font-family': 'Sora, sans-serif' });
+      for (let k = 0; k <= FS * 10; k++) {
+        const v = k / 10, a = ang(v), major = k % 10 === 0, half = k % 5 === 0;
+        const r1 = major ? R - 9 : half ? R - 6 : R - 3.5;
+        el('line', { x1: cx + R * Math.cos(a), y1: cy - R * Math.sin(a), x2: cx + r1 * Math.cos(a), y2: cy - r1 * Math.sin(a), stroke: '#b9c1d9', 'stroke-width': major ? 1.6 : half ? 1.1 : .6 }, scale);
+        if (major) txt(scale, cx + (R + 9) * Math.cos(a), cy - (R + 9) * Math.sin(a) + 3, String(v), { 'text-anchor': 'middle', 'font-size': 9, fill: '#b9c1d9', 'font-family': 'Sora, sans-serif' });
       }
       const tgt = el('line', { x1: cx, y1: cy, x2: cx, y2: cy, stroke: '#d4891a', 'stroke-width': 3, 'stroke-linecap': 'round', opacity: 0 }, scale);
       const needle = el('line', { x1: cx, y1: cy, x2: cx - R + 12, y2: cy, stroke: '#fff', 'stroke-width': 2.2, 'stroke-linecap': 'round' }, scale);
       el('circle', { cx, cy, r: 4, fill: '#fff' }, scale);
       scale._set = (v, t) => {
-        const a = ang(Math.max(0, Math.min(VBAT, v))), r = R - 12;
+        const a = ang(Math.max(0, Math.min(FS, v))), r = R - 12;
         needle.setAttribute('x2', cx + r * Math.cos(a)); needle.setAttribute('y2', cy - r * Math.sin(a));
         if (t == null) { tgt.setAttribute('opacity', 0); return; }
         const b = ang(t);
@@ -854,129 +888,236 @@
       };
     })();
 
-    const rowFull = v => (points[v] || []).length >= 4;
-    function nextActive() { const k = targets.find(v => !rowFull(v)); return k == null ? null : k; }
+    /* ---------- table model ---------- */
+    const num = s => { const t = String(s == null ? '' : s).trim().replace(/[\u2212\u2013]/g, '-').replace(',', '.'); return t === '' ? null : (/^[-+]?(\d+\.?\d*|\.\d+)$/.test(t) ? +t : NaN); };
+    const isBlank = s => String(s == null ? '' : s).trim() === '';
+    function rowV(r) { const v = num(rows[r] && rows[r].v); return v != null && Number.isFinite(v) && v >= VMIN - 1e-9 && v <= VMAX + 1e-9 ? v : null; }
+    function ptXY(pt) { const x = num(pt.x), y = num(pt.y); return x != null && y != null && Number.isFinite(x) && Number.isFinite(y) ? [Math.max(-BOARD, Math.min(BOARD, x)), Math.max(-BOARD, Math.min(BOARD, y))] : null; }
+    const rowPts = r => rows[r].p.map(ptXY).filter(Boolean);
     function say(text, kind) { msg.textContent = text; msg.className = 'tb-msg' + (kind ? ' ' + kind : ''); }
-    const more = n => `Choose ${n} more target${n === 1 ? '' : 's'}.`;
+    const RANGE_HINT = 'Target voltages for this setup run from 1.7 to 2.2 V.';
+    const XY_HINT = 'x and y run from −5 to +5 cm, measured from the centre of the board.';
 
-    function renderChips() {
-      chipsBox.innerHTML = '';
-      CHOICES.forEach(v => {
-        const b = document.createElement('button'); b.type = 'button';
-        const on = targets.includes(v);
-        b.className = 'chip' + (on ? ' on' : '');
-        b.setAttribute('aria-pressed', on ? 'true' : 'false');
-        if (on) b.style.background = vColor(v);
-        b.textContent = fmtLabel(v);
-        b.addEventListener('click', () => toggleTarget(v));
-        chipsBox.appendChild(b);
-      });
-    }
-    function toggleTarget(v) {
-      if (targets.includes(v)) {
-        const had = (points[v] || []).length;
-        targets = targets.filter(t => t !== v); delete points[v];
-        if (active === v) active = nextActive();
-        say(had ? `Removed the ${fmtLabel(v)} row and its point${had > 1 ? 's' : ''}. ${more(4 - targets.length)}` : more(4 - targets.length), '');
-      } else {
-        if (targets.length >= 4) { say('Four targets are already chosen. Deselect one first.', 'warn'); return; }
-        targets = targets.concat(v).sort((a, b) => a - b); points[v] = [];
-        if (active == null || rowFull(active)) active = v;
-        say(targets.length < 4 ? more(4 - targets.length) : '', '');
-      }
-      refresh();
-    }
-    function renderTable() {
+    function buildTable() {
       tbody.innerHTML = '';
-      if (!targets.length) { tbody.innerHTML = '<tr><td colspan="5" class="cell-empty">Choose target voltages above.</td></tr>'; return; }
-      targets.forEach(v => {
-        const tr = document.createElement('tr');
-        if (v === active) tr.className = 'active';
-        const td0 = document.createElement('td'); td0.className = 'vcell';
-        const pick = document.createElement('button'); pick.type = 'button'; pick.className = 'row-pick';
-        pick.innerHTML = `<span class="vtag"><i style="background:${vColor(v)}"></i>${v.toFixed(1)}</span>`;
-        pick.setAttribute('aria-label', `Record points for ${fmtLabel(v)}`);
-        pick.addEventListener('click', () => { active = v; say(`Recording the ${fmtLabel(v)} line.`, ''); refresh(); });
-        td0.appendChild(pick); tr.appendChild(td0);
+      rows.forEach((row, r) => {
+        const tr = document.createElement('tr'); tr.dataset.r = r;
+        let h = `<td class="vcell"><span class="vbox"><i class="vdot"></i><input class="vin" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="1.7–2.2" aria-label="Voltage, row ${r + 1}"></span></td>`;
         for (let k = 0; k < 4; k++) {
-          const td = document.createElement('td'); const p = (points[v] || [])[k];
-          if (p) {
-            const span = document.createElement('span'); span.className = 'cell-pt';
-            span.textContent = `(${fmt1(p.x)}, ${fmt1(p.y)})`;
-            const x = document.createElement('button'); x.type = 'button'; x.className = 'cell-x'; x.textContent = '×';
-            x.setAttribute('aria-label', 'Remove this point');
-            x.addEventListener('click', () => { points[v].splice(k, 1); if (active == null) active = v; say('Point removed.', ''); refresh(); });
-            span.appendChild(x); td.appendChild(span);
-          } else td.innerHTML = '<span class="cell-empty">—</span>';
-          tr.appendChild(td);
+          h += `<td class="pcell"><span class="pair">(<input class="cin" data-k="${k}" data-c="x" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="x${k + 1}, row ${r + 1}">,` +
+               `<input class="cin" data-k="${k}" data-c="y" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="y${k + 1}, row ${r + 1}">)</span></td>`;
         }
+        h += `<td class="rcell"><button type="button" class="row-del" aria-label="Remove row ${r + 1}" title="Remove row">×</button></td>`;
+        tr.innerHTML = h;
         tbody.appendChild(tr);
       });
+      syncInputs();
+    }
+    const trOf = r => tbody.children[r];
+    const vInput = r => trOf(r).querySelector('.vin');
+    const cInput = (r, k, c) => trOf(r).querySelector(`.cin[data-k="${k}"][data-c="${c}"]`);
+    function syncInputs() {
+      rows.forEach((row, r) => {
+        const tr = trOf(r); if (!tr) return;
+        const vi = tr.querySelector('.vin'); if (vi.value !== row.v) vi.value = row.v;
+        row.p.forEach((pt, k) => ['x', 'y'].forEach(c => {
+          const inp = cInput(r, k, c); if (inp.value !== pt[c]) inp.value = pt[c];
+          inp.classList.toggle('auto', !!pt['a' + c]);
+        }));
+      });
+      decorate();
+    }
+    function decorate() {
+      rows.forEach((row, r) => {
+        const tr = trOf(r); if (!tr) return;
+        const v = rowV(r), raw = num(row.v);
+        tr.classList.toggle('active', r === active);
+        tr.querySelector('.vdot').style.background = v == null ? 'transparent' : vColor(v);
+        tr.querySelector('.vin').classList.toggle('flag', !isBlank(row.v) && v == null);
+        row.p.forEach((pt, k) => {
+          const xy = ptXY(pt), span = cInput(r, k, 'x').parentNode;
+          const off = v != null && xy && Math.abs(potential(xy[0], xy[1]) - v) > TOL;
+          span.classList.toggle('off', !!off);
+          span.title = off ? `This point reads ${fmtV(potential(xy[0], xy[1]))} V` : '';
+        });
+        if (raw == null) tr.querySelector('.vin').title = '';
+      });
+      tbody.querySelectorAll('.row-del').forEach(b => { b.disabled = rows.length <= 1; });
+      if (btnAdd) btnAdd.disabled = rows.length >= MAX_ROWS;
     }
     const showEq = () => bEq.getAttribute('aria-pressed') === 'true';
     const showFl = () => bFl.getAttribute('aria-pressed') === 'true';
+    const validRows = () => rows.map((_, r) => r).filter(r => rowV(r) != null);
     function renderTrayMarks() {
       L.marks.innerHTML = ''; L.lines.innerHTML = '';
       if (showFl()) drawFieldLinesSVG(L.lines, tmap, { stroke: 'rgba(212,137,26,.8)', 'stroke-width': 1.6, 'stroke-dasharray': '6 5' }, true);
-      if (showEq()) targets.forEach(v => drawContoursSVG(L.lines, v, tmap, { stroke: vColor(v, .75), 'stroke-width': 2.2, 'stroke-dasharray': '2 5', 'stroke-linecap': 'round' }));
-      targets.forEach(v => (points[v] || []).forEach(p => {
-        const q = tmap([p.x, p.y]), c = vColor(v);
+      const vs = [...new Set(validRows().map(rowV))];
+      if (showEq()) vs.forEach(v => drawContoursSVG(L.lines, v, tmap, { stroke: vColor(v, .75), 'stroke-width': 2.2, 'stroke-dasharray': '2 5', 'stroke-linecap': 'round' }));
+      validRows().forEach(r => rowPts(r).forEach(p => {
+        const q = tmap(p), c = vColor(rowV(r));
         el('path', { d: `M${q[0] - 6} ${q[1] - 6}L${q[0] + 6} ${q[1] + 6}M${q[0] + 6} ${q[1] - 6}L${q[0] - 6} ${q[1] + 6}`, stroke: c, 'stroke-width': 3, 'stroke-linecap': 'round' }, L.marks);
       }));
     }
     function renderGraph() {
       const G = drawGraphBase(graph);
       if (showFl()) drawFieldLinesSVG(G.under, gmap, { stroke: 'rgba(212,137,26,.75)', 'stroke-width': 1.5, 'stroke-dasharray': '6 5' }, true);
-      if (showEq()) targets.forEach(v => drawContoursSVG(G.under, v, gmap, { stroke: vColor(v, .6), 'stroke-width': 2.2, 'stroke-dasharray': '2 5', 'stroke-linecap': 'round' }));
-      targets.forEach(v => { const ps = (points[v] || []).map(p => [p.x, p.y]); if (ps.length) plotSet(G, v, ps); });
+      const vs = [...new Set(validRows().map(rowV))];
+      if (showEq()) vs.forEach(v => drawContoursSVG(G.under, v, gmap, { stroke: vColor(v, .6), 'stroke-width': 2.2, 'stroke-dasharray': '2 5', 'stroke-linecap': 'round' }));
+      validRows().forEach(r => { const ps = rowPts(r); if (ps.length) plotSet(G, rowV(r), ps); });
       if (tutLinesHidden) G.lines.setAttribute('opacity', 0);
     }
     function updateMeter() {
+      const t = rows[active] ? rowV(active) : null;
+      tbT.textContent = t == null ? 'enter a voltage' : fmtLabel(t);
       if (!probe) {
-        dmmVal.textContent = '– – –'; tbD.textContent = '—'; tbD.className = ''; scale._set(0, active);
+        dmmVal.textContent = '– – –'; tbD.textContent = '—'; tbD.className = ''; scale._set(0, t);
         probeG.style.display = 'none'; return;
       }
       const v = potential(probe[0], probe[1]);
       dmmVal.textContent = fmtV(v);
-      scale._set(v, active);
+      scale._set(v, t);
       probeG.style.display = '';
       const q = tmap(probe);
       ring.setAttribute('cx', q[0]); ring.setAttribute('cy', q[1]); dotP.setAttribute('cx', q[0]); dotP.setAttribute('cy', q[1]);
       wire.setAttribute('d', `M${q[0]} ${q[1]} C${q[0] + 50} ${q[1] - 60} 560 ${TY0 - 10} 655 ${TY0 + 40}`);
-      if (active != null) {
-        const d = v - active, on = Math.abs(d) <= TOL;
+      if (t != null) {
+        const d = v - t, on = Math.abs(d) <= TOL;
         tbD.textContent = (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(2) + ' V';
         tbD.className = on ? 'ok' : '';
         if (!tut.on) setReading('tray', fmtV(v) + ' V', on);
       } else { tbD.textContent = '—'; tbD.className = ''; if (!tut.on) setReading('tray', fmtV(v) + ' V', false); }
     }
-    function refresh() {
-      if (active != null && !targets.includes(active)) active = nextActive();
-      tbT.textContent = active == null ? (targets.length < 4 ? 'choose targets' : 'all rows full') : fmtLabel(active);
-      renderChips(); renderTable(); renderTrayMarks(); renderGraph(); updateMeter();
+    function refresh() { decorate(); renderTrayMarks(); renderGraph(); updateMeter(); }
+    function setActive(r) { if (r !== active && rows[r]) { active = r; decorate(); updateMeter(); } }
+
+    /* ---------- autofill from the field model ---------- */
+    const GRID_Y = []; for (let y = -4.5; y <= 4.5 + 1e-9; y += 0.5) GRID_Y.push(Math.round(y * 10) / 10);
+    function pickYs(v, used, n) {               // spread n new y values, bases first, never close to used ones
+      const out = [], taken = used.slice();
+      const md = y => taken.length ? Math.min(...taken.map(u => Math.abs(u - y))) : Infinity;
+      for (const pool of [SPREAD_Y, GRID_Y]) {
+        while (out.length < n) {
+          let best = null, bd = 0.75 - 1e-9;
+          for (const y of pool) { if (locateX(v, y) == null) continue; const d = md(y); if (d > bd) { bd = d; best = y; } }
+          if (best == null) break;
+          out.push(best); taken.push(best);
+        }
+      }
+      return out.sort((a, b) => a - b);
     }
+    function fillRow(r) {
+      const v = rowV(r); if (v == null) return 0;
+      const row = rows[r];
+      const empties = row.p.map((pt, k) => k).filter(k => isBlank(row.p[k].x) && isBlank(row.p[k].y));
+      if (!empties.length) return 0;
+      const used = row.p.map(pt => num(pt.y)).filter(y => y != null && Number.isFinite(y));
+      const ys = pickYs(v, used, empties.length);
+      ys.forEach((y, i) => {
+        const pt = row.p[empties[i]];
+        pt.x = fmt1(locateX(v, y)); pt.y = fmt1(y); pt.ax = true; pt.ay = true;
+      });
+      syncInputs(); refresh();
+      return ys.length;
+    }
+    function clampCell(r, k, c) {
+      const pt = rows[r].p[k], n = num(pt[c]);
+      if (n == null) return true;
+      if (!Number.isFinite(n)) { say('Enter a number for x and y, for example −1.5. ' + XY_HINT, ''); return false; }
+      if (Math.abs(n) > BOARD + 1e-9) { pt[c] = fmt1(Math.sign(n) * BOARD); cInput(r, k, c).value = pt[c]; say(XY_HINT + ' The value was limited to the board edge.', ''); }
+      return true;
+    }
+    function onEnter(r, k, c) {
+      const v = rowV(r);
+      if (k == null) {                          // Enter in the voltage cell
+        if (v == null) { say(isBlank(rows[r].v) ? 'Enter a target voltage first. ' + RANGE_HINT : RANGE_HINT, ''); return; }
+        const n = fillRow(r);
+        say(n ? `Filled ${n} point${n === 1 ? '' : 's'} on the ${fmtLabel(v)} line from the field model.` : `The ${fmtLabel(v)} row already has four points.`, n ? 'good' : '');
+        return;
+      }
+      clampCell(r, k, c);
+      if (v == null) { say('Set this row’s voltage first. ' + RANGE_HINT, ''); return; }
+      const pts = rows[r].p.map(ptXY), have = pts.filter(Boolean);
+      const allBlank = rows[r].p.every(pt => isBlank(pt.x) && isBlank(pt.y));
+      if (!have.length && !allBlank) { say('Enter both x and y for the point, then press Enter.', ''); return; }
+      const n = fillRow(r);
+      if (!n) { say(`The ${fmtLabel(v)} row already has four points.`, ''); return; }
+      const own = pts[k];
+      const off = own && Math.abs(potential(own[0], own[1]) - v) > TOL;
+      say(off ? `(${fmt1(own[0])}, ${fmt1(own[1])}) reads ${fmtV(potential(own[0], own[1]))} V, so it is off the ${fmtLabel(v)} line. The filled points follow the ${fmtLabel(v)} line from the field model.`
+              : `Filled ${n} point${n === 1 ? '' : 's'} on the ${fmtLabel(v)} line from the field model.`, off ? '' : 'good');
+    }
+    tbody.addEventListener('focusin', e => { const tr = e.target.closest('tr'); if (tr) setActive(+tr.dataset.r); });
+    tbody.addEventListener('input', e => {
+      const t = e.target, tr = t.closest('tr'); if (!tr) return;
+      const r = +tr.dataset.r;
+      if (t.classList.contains('vin')) { rows[r].v = t.value; }
+      else if (t.classList.contains('cin')) {
+        const pt = rows[r].p[+t.dataset.k], c = t.dataset.c;
+        pt[c] = t.value; pt['a' + c] = false; t.classList.remove('auto');
+      } else return;
+      refresh();
+    });
+    tbody.addEventListener('change', e => {
+      const t = e.target, tr = t.closest('tr'); if (!tr) return;
+      const r = +tr.dataset.r;
+      if (t.classList.contains('vin')) { if (!isBlank(rows[r].v) && rowV(r) == null) say(RANGE_HINT, ''); }
+      else if (t.classList.contains('cin')) { clampCell(r, +t.dataset.k, t.dataset.c); refresh(); }
+    });
+    tbody.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' || e.isComposing) return;
+      const t = e.target, tr = t.closest('tr'); if (!tr) return;
+      e.preventDefault();
+      const r = +tr.dataset.r;
+      if (t.classList.contains('vin')) onEnter(r, null, null);
+      else if (t.classList.contains('cin')) onEnter(r, +t.dataset.k, t.dataset.c);
+    });
+    tbody.addEventListener('click', e => {
+      const b = e.target.closest('.row-del'); if (!b || rows.length <= 1) return;
+      const r = +b.closest('tr').dataset.r;
+      rows.splice(r, 1); if (active >= rows.length) active = rows.length - 1; else if (active > r) active--;
+      buildTable(); refresh(); say('Row removed.', '');
+    });
+    if (btnAdd) btnAdd.addEventListener('click', () => {
+      if (rows.length >= MAX_ROWS) return;
+      rows.push(blankRow()); active = rows.length - 1; buildTable(); refresh();
+      vInput(active).focus();
+    });
+
+    /* ---------- probe on the tray ---------- */
     function toCm(e) {
       const pt = tray.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
       const s = pt.matrixTransform(tray.getScreenCTM().inverse());
-      return [(s.x - TX0) / TS, HT - (s.y - TY0) / TS];
+      return [TXL + (s.x - TX0) / TS, TYT - (s.y - TY0) / TS];
     }
-    const inside = p => p[0] >= 0 && p[0] <= W && p[1] >= 0 && p[1] <= HT;
+    const inside = p => Math.abs(p[0]) <= BOARD && Math.abs(p[1]) <= BOARD;
+    function nextOpenRow(from) {
+      for (let i = 1; i <= rows.length; i++) {
+        const r = (from + i) % rows.length;
+        if (rowV(r) != null && rows[r].p.some(pt => isBlank(pt.x) && isBlank(pt.y))) return r;
+      }
+      return null;
+    }
     function record(p) {
-      if (active == null) { say(targets.length < 4 ? 'Choose four target voltages first.' : 'All rows are full. Remove a point or pick another row.', 'warn'); return false; }
+      const r = active, t = rowV(r);
+      if (t == null) { say('Enter a target voltage in the highlighted row first. ' + RANGE_HINT, ''); return false; }
       const x = Math.round(p[0] * 10) / 10, y = Math.round(p[1] * 10) / 10;
-      const v = potential(x, y), d = v - active;
+      const v = potential(x, y), d = v - t;
       if (Math.abs(d) > TOL) {
-        say(`${fmtV(v)} V is ${Math.abs(d).toFixed(2)} V ${d > 0 ? 'above' : 'below'} the ${fmtLabel(active)} target. Move toward the ${d > 0 ? '− plate' : '+ plate'}.`, 'warn');
+        say(`${fmtV(v)} V is ${Math.abs(d).toFixed(2)} V ${d > 0 ? 'above' : 'below'} the ${fmtLabel(t)} target. Move toward the ${d > 0 ? '− plate (left)' : '+ plate (right)'}.`, 'warn');
         return false;
       }
-      const row = points[active];
-      if (row.some(q => Math.hypot(q.x - x, q.y - y) < 1.5)) { say('There is already a point close to this one. Spread the points along the line.', 'warn'); return false; }
-      row.push({ x, y, v });
-      const done = row.length >= 4, label = fmtLabel(active);
-      if (done) active = nextActive();
-      if (done && active == null) say(`Recorded (${fmt1(x)}, ${fmt1(y)}). All four lines are recorded; compare them with the true equipotentials.`, 'good');
-      else if (done) say(`Recorded (${fmt1(x)}, ${fmt1(y)}). ${label} line complete; next, the ${fmtLabel(active)} line.`, 'good');
-      else say(`Recorded (${fmt1(x)}, ${fmt1(y)}) at ${fmtV(v)} V.`, 'good');
+      const row = rows[r];
+      const k = row.p.findIndex(pt => isBlank(pt.x) && isBlank(pt.y));
+      if (k < 0) { say('All four points in this row are filled. Clear a cell or choose another row.', 'warn'); return false; }
+      if (rowPts(r).some(q => Math.hypot(q[0] - x, q[1] - y) < 0.5)) { say('There is already a point close to this one. Spread the points along the line.', 'warn'); return false; }
+      Object.assign(row.p[k], { x: fmt1(x), y: fmt1(y), ax: false, ay: false });
+      const full = row.p.every(pt => !isBlank(pt.x) || !isBlank(pt.y));
+      syncInputs();
+      if (full) {
+        const nx = nextOpenRow(r);
+        if (nx != null) { active = nx; say(`Recorded (${fmt1(x)}, ${fmt1(y)}). The ${fmtLabel(t)} row is full; next, the ${fmtLabel(rowV(nx))} row.`, 'good'); }
+        else say(`Recorded (${fmt1(x)}, ${fmt1(y)}). Every row is full; compare the lines with the true equipotentials.`, 'good');
+      } else say(`Recorded (${fmt1(x)}, ${fmt1(y)}) at ${fmtV(v)} V.`, 'good');
       refresh();
       return true;
     }
@@ -997,15 +1138,15 @@
       if (moved < 8 && inside(p)) record(p);
     });
     [bEq, bFl].forEach(b => b.addEventListener('click', () => {
-      b.setAttribute('aria-pressed', showEqFlip(b));
+      b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
       renderTrayMarks(); renderGraph();
     }));
-    function showEqFlip(b) { return b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'; }
     function reset() {
-      targets = DEFAULT_TARGETS.slice(); points = {}; targets.forEach(v => { points[v] = []; });
-      active = targets[0]; probe = null;
+      rows = [blankRow(), blankRow(), blankRow(), blankRow()];
+      active = 0; probe = null;
       bEq.setAttribute('aria-pressed', 'false'); bFl.setAttribute('aria-pressed', 'false');
-      say('', '');
+      buildTable();
+      say('Enter target voltages (1.7 to 2.2 V) in the table, then record points with the probe or press Enter in a row to fill it from the field model.', '');
       refresh();
     }
 
@@ -1057,50 +1198,53 @@
       const r = elm.getBoundingClientRect();
       const y = Math.max(0, window.scrollY + r.top - Math.max(60, (window.innerHeight - Math.min(r.height, window.innerHeight - 220)) / 2 - 80));
       const y0 = window.scrollY;
-      const go = anim(Math.min(900, 250 + Math.abs(y - y0) * .5), e => window.scrollTo({ top: y0 + (y - y0) * e, behavior: 'instant' }));
-      await go; await wait(250);
-    }
-    function locate(v, y) {                    // the field model: where on this row the potential equals v
-      let a = PLATE.neg.x + .1, b = PLATE.pos.x - .1;
-      for (let k = 0; k < 50; k++) { const m = (a + b) / 2; if (potential(m, y) < v) a = m; else b = m; }
-      return Math.round((a + b) / 2 * 10) / 10;
+      await anim(Math.min(900, 250 + Math.abs(y - y0) * .5), e => window.scrollTo({ top: y0 + (y - y0) * e, behavior: 'instant' }));
+      await wait(250);
     }
     async function probeTo(p, ms) {
       const p0 = probe ? probe.slice() : [p[0], p[1]];
       await anim(ms, e => { probe = [p0[0] + (p[0] - p0[0]) * e, p0[1] + (p[1] - p0[1]) * e]; updateMeter(); });
+    }
+    async function typeInto(inp, s, set) {      // type a value into a table cell, one character at a time
+      inp.classList.add('typing');
+      for (let i = 1; i <= s.length; i++) { inp.value = s.slice(0, i); await wait(85); }
+      inp.classList.remove('typing');
+      set(s);
     }
     function pendingMark(p, v) {
       const q = tmap(p), c = vColor(v);
       const g = el('g', null, tutL);
       el('circle', { cx: q[0], cy: q[1], r: 11, fill: 'none', stroke: c, 'stroke-width': 1.6, 'stroke-dasharray': '3 3' }, g);
       el('path', { d: `M${q[0] - 6} ${q[1] - 6}L${q[0] + 6} ${q[1] + 6}M${q[0] + 6} ${q[1] - 6}L${q[0] - 6} ${q[1] + 6}`, stroke: c, 'stroke-width': 3, 'stroke-linecap': 'round' }, g);
-      txt(g, q[0] + 14, q[1] - 10, `(${fmt1(p[0])}, ${fmt1(p[1])})`, { 'font-size': 15, 'font-weight': 700, fill: c, 'font-family': 'Sora, sans-serif' });
+      const right = q[0] < 400;
+      txt(g, q[0] + (right ? 14 : -14), q[1] - 10, `(${fmt1(p[0])}, ${fmt1(p[1])})`, { 'text-anchor': right ? 'start' : 'end', 'font-size': 14, 'font-weight': 700, fill: c, 'font-family': 'Sora, sans-serif' });
       return g;
     }
     function plateTags() {
       const g = el('g', null, tutL);
-      [['neg', '#2d4fa3', '0 V'], ['pos', '#c0402b', '6 V']].forEach(([k, c, s]) => {
-        const pl = PLATE[k], a = tmap([pl.x, (pl.y0 + pl.y1) / 2]);
+      [['neg', '#2d4fa3', '0 V'], ['pos', '#c0402b', fmtV(VBAT).replace(/0$/, '') + ' V']].forEach(([k, c, s]) => {
+        const pl = PLATE[k], a = tmap([pl.x, (pl.y0 + pl.y1) / 2 - 2.2]);
         el('rect', { x: a[0] - 30, y: a[1] - 15, width: 60, height: 30, rx: 8, fill: '#fff', stroke: c, 'stroke-width': 2 }, g);
         txt(g, a[0], a[1] + 6, s, { 'text-anchor': 'middle', 'font-size': 16, 'font-weight': 700, fill: c, 'font-family': 'Sora, sans-serif' });
       });
       return g;
     }
-    async function drawLines() {               // trace each plotted line on the graph, one voltage at a time
+    async function drawLines(list) {           // trace each plotted line on the graph, one voltage at a time
       tutLinesHidden = false; renderGraph();
       const paths = Array.from(graph.querySelectorAll('path[stroke-width="3"]'));
       paths.forEach(pth => { const n = pth.getTotalLength(); pth.style.strokeDasharray = n; pth.style.strokeDashoffset = n; });
       for (let i = 0; i < paths.length; i++) {
-        const v = targets[i], n = paths[i].getTotalLength();
-        step('Draw the equipotential line', `A smooth curve through the four ${fmtLabel(v)} points. Every point on it is at the same potential.`, `V = ${fmtLabel(v)}`);
+        const v = list[i] ? list[i].v : null, n = paths[i].getTotalLength();
+        step('Draw the equipotential line', `A smooth curve through the four ${v == null ? '' : fmtLabel(v) + ' '}points. Every point on it is at the same potential.`, v == null ? '' : `V = ${fmtLabel(v)}`);
         await anim(1500, e => { paths[i].style.strokeDashoffset = n * (1 - e); });
         await wait(500);
       }
       paths.forEach(pth => { pth.style.strokeDasharray = ''; pth.style.strokeDashoffset = ''; });
     }
     function rightAngle(v, y) {                // a small square where a field line crosses the equipotential
-      const x = locate(v, y), gv = gradV(x, y), m = Math.hypot(gv[0], gv[1]) || 1;
-      const f = [-gv[0] / m, -gv[1] / m], t = [-f[1], f[0]], s = .7;
+      const x = locateX(v, y); if (x == null) return null;
+      const gv = gradV(x, y), m = Math.hypot(gv[0], gv[1]) || 1;
+      const f = [-gv[0] / m, -gv[1] / m], t = [-f[1], f[0]], s = .4;
       const P = (a, b) => gmap([x + a[0] * s + b[0] * s, y + a[1] * s + b[1] * s]);
       const q0 = gmap([x, y]), q1 = P(f, [0, 0]), q2 = P(f, t), q3 = P([0, 0], t);
       const g = el('g', null, graph);
@@ -1108,45 +1252,73 @@
       el('circle', { cx: q0[0], cy: q0[1], r: 3.5, fill: '#1c2541' }, g);
       return g;
     }
+    /* the run plan: the voltages currently set in the table (their values and their count) */
+    function tutorialPlan() {
+      const notes = [], seen = new Set();
+      let list = [];
+      rows.forEach((row, r) => {
+        if (isBlank(row.v)) return;
+        const v = rowV(r);
+        if (v == null) { notes.push(`“${row.v.trim()}” skipped (outside 1.7–2.2 V)`); return; }
+        const key = v.toFixed(3);
+        if (seen.has(key)) { notes.push(`repeat of ${fmtLabel(v)} skipped`); return; }
+        seen.add(key); list.push({ r, v });
+      });
+      const defaults = !list.length;
+      const rowsV = defaults ? DEFAULT_TARGETS.map(String) : rows.map(row => row.v);
+      if (defaults) list = DEFAULT_TARGETS.map((v, r) => ({ r, v }));
+      return { list, notes, rowsV, defaults };
+    }
+    function applyPlan(plan) {
+      rows = plan.rowsV.map(v => blankRow(v));
+      active = plan.list[0].r; probe = null;
+      bEq.setAttribute('aria-pressed', 'false'); bFl.setAttribute('aria-pressed', 'false');
+      buildTable(); say('', ''); refresh();
+    }
     async function tutorial() {
       tut.on = true; tut.cancel = false; document.body.classList.add('tut-on'); bar.hidden = false; btnTut.disabled = true;
       const bench = document.querySelector('.bench'), dmm = document.querySelector('.dmm'), tbox = document.querySelector('.target-box');
-      const tblWrap = document.querySelector('#pr-table').closest('.pr-block'), gWrap = graph.closest('.pr-block');
+      const tblWrap = table.closest('.pr-block'), gWrap = graph.closest('.pr-block');
+      const plan = tutorialPlan(), list = plan.list;
       try {
-        reset(); setReading('tray', null); tutL.innerHTML = ''; tutLinesHidden = true; renderGraph();
+        applyPlan(plan); setReading('tray', null); tutL.innerHTML = ''; tutLinesHidden = true; renderGraph();
         await scrollToEl(bench); hi(bench);
-        step('The setup', 'Two metal plates stand in a tray of weak conducting solution. Electrodes at x = 6 cm and x = 24 cm, both from y = 6 to 14 cm.', '');
-        await wait(2800);
-        step('Connect the supply', 'The supply holds the − plate at 0 V and the + plate at 6 V, so a steady current flows through the solution.', '− plate: 0 V · + plate: 6 V');
-        const tags = plateTags(); await wait(3200);
+        step('The setup', 'Two small metal plates stand in a wide tray of weak conducting solution, at x = −10 cm and x = +10 cm. The graph board under the tray runs from −5 to +5 cm in x and y, centred between the plates.', '');
+        await wait(3200);
+        step('Connect the supply', `The supply holds the − plate at 0 V and the + plate at ${fmtV(VBAT).replace(/0$/, '')} V, so a steady current flows through the solution. The centre of the board sits at about 1.95 V.`, `− plate: 0 V · + plate: ${fmtV(VBAT).replace(/0$/, '')} V`);
+        const tags = plateTags(); await wait(3400);
         hi(dmm);
         step('Connect the voltmeter', 'COM goes to the − plate; the probe goes to V. The meter then reads the potential of the point the probe touches.', '');
         await wait(3000);
         tags.remove();
-        hi(chipsBox);
-        await scrollToEl(chipsBox);
-        step('Choose the target voltages', 'Four targets between the plate voltages, one equipotential line each.', 'targets: 1 V, 2 V, 4 V, 5 V');
-        await wait(2600);
-        for (const v of targets.slice()) {
-          active = v; refresh();
+        await scrollToEl(tblWrap); hi(tblWrap);
+        const vs = list.map(o => fmtT(o.v)).join(', ') + ' V';
+        step('Target voltages', plan.defaults
+          ? `No target voltages are set in the table, so the run uses the defaults: one equipotential line for each.`
+          : `The run uses the ${list.length} voltage${list.length === 1 ? '' : 's'} set in the table: one equipotential line for each.`,
+          vs + (plan.notes.length ? ' · ' + plan.notes.join('; ') : ''));
+        await wait(2800);
+        for (const { r, v } of list) {
+          active = r; refresh();
           await scrollToEl(bench); hi(bench, tbox);
-          step(`Target ${fmtLabel(v)}`, `Find four points where the voltmeter reads ${fmtLabel(v)}, spread from the bottom of the tray to the top.`, `target = ${fmtLabel(v)}`);
+          step(`Target ${fmtLabel(v)}`, `Find four points where the voltmeter reads ${fmtLabel(v)}, spread across the board from y = −4.5 cm to y = 4.5 cm.`, `target = ${fmtLabel(v)}`);
           await wait(1800);
           const found = [];
-          for (const y of [4, 8, 12, 16]) {
-            const x = locate(v, y), start = Math.max(1, Math.min(W - 1, x + (found.length % 2 ? 3.2 : -3.2)));
-            step('Move the probe', `Slide the probe along y = ${y} cm and watch the reading.`, `y = ${y} cm`);
+          for (const y of SPREAD_Y) {
+            const x = r1(locateX(v, y)), side = found.length % 2 ? 1 : -1;
+            const start = Math.max(-4.8, Math.min(4.8, x + side * 2.2));
+            step('Move the probe', `Slide the probe along y = ${fmt1(y)} cm and watch the reading.`, `y = ${fmt1(y)} cm`);
             await probeTo([start, y], found.length ? 700 : 1000);
             const r0 = potential(start, y);
             tF.textContent = `${fmtV(r0)} V: ${r0 < v ? 'too low, move toward the + plate' : 'too high, move toward the − plate'}`;
             await wait(600);
-            const over = x + (x > start ? .7 : -.7);
-            await probeTo([over, y], 1500);
+            const over = x + (x > start ? .4 : -.4);
+            await probeTo([over, y], 1400);
             tF.textContent = `${fmtV(potential(over, y))} V: just past the target, ease back`;
             await wait(500);
             await probeTo([x, y], 700);
             const rv = potential(x, y);
-            step('Reading matches', `The reading is within 0.1 V of the target. Mark the point and note its coordinates.`, `${fmtV(rv)} V at (${fmt1(x)}, ${fmt1(y)})`);
+            step('Reading matches', `The reading is within ${TOL.toFixed(2)} V of the target. Mark the point and note its coordinates.`, `${fmtV(rv)} V at (${fmt1(x)}, ${fmt1(y)})`);
             pendingMark([x, y], v); found.push([x, y]);
             await wait(1300);
           }
@@ -1155,20 +1327,21 @@
           step('Fill the table', `Write the four ${fmtLabel(v)} points into the table, one cell at a time.`, '');
           await wait(900);
           for (let k = 0; k < found.length; k++) {
-            record(found[k]);
-            const cellRow = Array.from(tbody.querySelectorAll('tr')).find(tr => tr.querySelector('.vtag') && tr.querySelector('.vtag').textContent === v.toFixed(1));
-            const td = cellRow && cellRow.children[k + 1];
-            if (td) hi(tblWrap, td);
-            tF.textContent = `(X${k + 1}, Y${k + 1}) = (${fmt1(found[k][0])}, ${fmt1(found[k][1])})`;
-            await wait(1000);
+            const pt = rows[r].p[k], td = cInput(r, k, 'x').closest('td');
+            hi(tblWrap, td);
+            tF.textContent = `(x${k + 1}, y${k + 1}) = (${fmt1(found[k][0])}, ${fmt1(found[k][1])})`;
+            await typeInto(cInput(r, k, 'x'), fmt1(found[k][0]), s => { pt.x = s; });
+            await typeInto(cInput(r, k, 'y'), fmt1(found[k][1]), s => { pt.y = s; });
+            syncInputs(); renderTrayMarks(); renderGraph();
+            await wait(500);
           }
           tutL.innerHTML = '';
           hi(); await wait(400);
         }
         await scrollToEl(gWrap); hi(gWrap);
-        step('Plot the points', 'Each row of the table is plotted on graph paper with the plates drawn in.', '');
+        step('Plot the points', 'Each row of the table is plotted on graph paper, with x and y from −5 to +5 cm and the origin at the centre.', '');
         await wait(1800);
-        await drawLines();
+        await drawLines(list);
         hi(bEq, gWrap);
         step('Compare with the true lines', 'The dashed curves are the true equipotentials from the field model. The plotted lines follow them closely.', '');
         bEq.setAttribute('aria-pressed', 'true'); renderTrayMarks(); renderGraph();
@@ -1176,15 +1349,17 @@
         hi(bFl, gWrap);
         step('Field lines', 'The amber field lines run from the + plate to the − plate and cross every equipotential at right angles.', 'field lines ⟂ equipotentials');
         bFl.setAttribute('aria-pressed', 'true'); renderTrayMarks(); renderGraph();
-        rightAngle(2, 10); rightAngle(4, 10);
+        rightAngle(list[0].v, 3); if (list.length > 1) rightAngle(list[list.length - 1].v, -3);
         await wait(4200);
         hi();
-        step('Done', 'Four equipotential lines mapped and checked against the field model. Start over to map them by hand.', '');
+        step('Done', `${list.length} equipotential line${list.length === 1 ? '' : 's'} mapped and checked against the field model. Start over to map them by hand.`, '');
         await wait(4000);
       } catch (e) {
         if (e !== STOP) throw e;
       } finally {
         tut.on = false; tut.skip = false; resetPlayback(); hi(); tutL.innerHTML = '';
+        tbody.querySelectorAll('.typing').forEach(i => i.classList.remove('typing'));
+        syncInputs();
         tutLinesHidden = false; probe = null; updateMeter(); renderGraph();
         document.body.classList.remove('tut-on'); bar.hidden = true; btnTut.disabled = false;
       }
@@ -1194,9 +1369,12 @@
     document.getElementById('tut-skip').addEventListener('click', () => { tut.skip = true; });
     onLeave.practical = () => { if (tut.on) tut.cancel = true; };
 
-    document.getElementById('pr-reset').addEventListener('click', reset);
+    document.getElementById('pr-reset').addEventListener('click', () => { if (!tut.on) reset(); });
     reset();
-    window.__practical = { state: () => ({ targets: targets.slice(), points: JSON.parse(JSON.stringify(points)), active }) };
+    window.__practical = {
+      state: () => ({ rows: JSON.parse(JSON.stringify(rows)), active, probe: probe && probe.slice() }),
+      potential, locateX
+    };
   })();
 
   /* =====================================================================

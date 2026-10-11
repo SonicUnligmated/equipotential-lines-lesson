@@ -19,17 +19,28 @@ https://sonicunligmated.github.io/equipotential-lines-lesson/
 
 ## Physics model
 
-Two plate electrodes in a 30 cm × 20 cm tray of conducting solution: − plate at x = 6 cm (0 V), + plate at x = 24 cm (6 V),
-both from y = 6 to 14 cm, insulating tray walls. The potential is a numerical solution of Laplace's equation on a 0.25 cm grid
-(`js/field-data.js`), read with bilinear interpolation. The worked example, the Practical voltmeter, the true equipotentials and
-the field lines all come from this one grid.
+Two small plates (1.2 cm high) in a wide, shallow tray of conducting solution: − plate at x = −10 cm (0 V, reference),
++ plate at x = +10 cm (3.9 V), both centred on y = 0. The graph board runs from −5 to +5 cm in x and y with the origin at its
+centre, so the board's centre sits at 1.95 V and the 1.7–2.2 V equipotentials fall across the board.
+
+Each plate is treated as a thin conductor of equivalent radius a = 0.3 cm (a flat strip of height h has equivalent radius h/4).
+For two such conductors with centres 2d = 20 cm apart, the exact 2-D potential is that of two line charges at x = ±b,
+b = √(d² − a²):
+
+    V(x, y) = 1.95 V + 3.9 V · ln(r₋ / r₊) / (2 · acosh(d / a))
+
+The worked example, the Practical voltmeter, the table autofill, the true equipotentials and the field lines all come from this
+one formula (contours via marching squares on a 0.1 cm grid).
+
+Practical table: target voltages 1.7–2.2 V (defaults 1.8, 1.9, 2.0, 2.1 V), x and y from −5 to +5 cm. Pressing Enter in a row
+fills its empty (x, y) pairs from the field model (spread over y = −4.5, −1.5, 1.5, 4.5 cm, skipping values already used);
+typed cells are never overwritten. The guided tutorial maps whatever voltages are set in the table.
 
 ## Files
 
 - `index.html` — hash-routed views
 - `css/styles.css`, `css/fonts.css` — theme; fonts vendored in `fonts/` (Sora, Source Sans 3, Kalam — SIL OFL)
 - `js/app.js` — navigation, background, probe cursor, interactives, MCQs, Practical
-- `js/field-data.js` — precomputed potential grid
 - `assets/` — circuit diagram and defibrillator photo from the lab manual (graph paper is drawn as SVG)
 
 Open `index.html` directly or serve the folder; no build step and no network needed.
